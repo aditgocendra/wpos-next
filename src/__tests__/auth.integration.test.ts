@@ -138,15 +138,15 @@ describe("NextAuth Integration Tests", () => {
       const session = await sessionCallback!({
         session: initialSession,
         token: token,
-        user: {} as User,
+        user: {} as unknown as Parameters<NonNullable<typeof sessionCallback>>[0]["user"],
         newSession: undefined,
         trigger: "update",
       });
 
-      const user = session?.user;
-      expect(user?.id).toBe("user-cashier-1");
-      expect(user?.role).toBe("CASHIER");
-      expect(user?.warehouseId).toBe("wh-456");
+      const sessionUser = session?.user as (Session["user"] & { id: string; role: Role; warehouseId?: string | null }) | undefined;
+      expect(sessionUser?.id).toBe("user-cashier-1");
+      expect(sessionUser?.role).toBe("CASHIER");
+      expect(sessionUser?.warehouseId).toBe("wh-456");
     });
   });
 });

@@ -17,7 +17,7 @@ describe("AuthService Unit Tests", () => {
         findUnique: vi.fn(),
       },
     };
-    authService = new AuthService(mockPrisma as unknown as Parameters<typeof AuthService["prototype"]["constructor"]>[0]);
+    authService = new AuthService(mockPrisma as unknown as ConstructorParameters<typeof AuthService>[0]);
   });
 
   describe("hashPassword and comparePassword", () => {
