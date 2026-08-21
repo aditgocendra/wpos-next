@@ -10,6 +10,7 @@ describe("UserService Unit Tests", () => {
       findUnique: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
+      updateMany: ReturnType<typeof vi.fn>;
       delete: ReturnType<typeof vi.fn>;
     };
     warehouse: {
@@ -46,6 +47,7 @@ describe("UserService Unit Tests", () => {
         findUnique: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
+        updateMany: vi.fn(),
         delete: vi.fn(),
       },
       warehouse: {

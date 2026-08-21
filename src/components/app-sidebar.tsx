@@ -39,7 +39,7 @@ const data = {
     },
     {
       title: "Warehouses",
-      url: "/warehouses",
+      url: "/warehouse",
       icon: (
         <WarehouseIcon />
       ),

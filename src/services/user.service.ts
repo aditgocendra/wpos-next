@@ -90,6 +90,13 @@ export class UserService {
     const warehouseId =
       input.role === "WAREHOUSE_ADMIN" ? input.warehouseId || null : null;
 
+    if (warehouseId) {
+      await this.db.user.updateMany({
+        where: { warehouseId },
+        data: { warehouseId: null },
+      });
+    }
+
     const user = await this.db.user.create({
       data: {
         name: input.name?.trim() || null,
@@ -155,6 +162,13 @@ export class UserService {
       }
     } else if (input.warehouseId !== undefined) {
       updateData.warehouseId = input.warehouseId || null;
+    }
+
+    if (updateData.warehouseId) {
+      await this.db.user.updateMany({
+        where: { warehouseId: updateData.warehouseId, NOT: { id } },
+        data: { warehouseId: null },
+      });
     }
 
     if (input.status) {

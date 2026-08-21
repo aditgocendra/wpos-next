@@ -72,14 +72,14 @@ async function main() {
     update: {
       password: hashedPassword,
       role: "CASHIER",
-      warehouseId: mainWarehouse.id,
+      warehouseId: null,
     },
     create: {
       email: "cashier@wpos.com",
       name: "Main Cashier",
       password: hashedPassword,
       role: "CASHIER",
-      warehouseId: mainWarehouse.id,
+      warehouseId: null,
     },
   });
 

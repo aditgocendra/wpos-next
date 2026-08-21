@@ -61,7 +61,8 @@ export async function proxy(req: NextRequest) {
   } else if (role === "WAREHOUSE_ADMIN") {
     // WAREHOUSE_ADMIN can access dashboard (/), /warehouses and /transfers
     const isDashboardRoute = pathname === "/";
-    const isWarehouseRoute = pathname.startsWith("/warehouses");
+    const isWarehouseRoute =
+      pathname.startsWith("/warehouse") || pathname.startsWith("/warehouses");
     const isTransferRoute = pathname.startsWith("/transfers");
     if (!isDashboardRoute && !isWarehouseRoute && !isTransferRoute) {
       return NextResponse.redirect(new URL("/", req.url));
