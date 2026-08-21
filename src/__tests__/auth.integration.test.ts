@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { authOptions } from "@/lib/auth";
 import { AuthService } from "@/services/auth.service";
-import type { Role } from "@/generated/prisma/client";
+import type { Role, UserStatus } from "@/generated/prisma/client";
 import type { Session, User } from "next-auth";
 import type { JWT } from "next-auth/jwt";
 
@@ -44,6 +44,7 @@ describe("NextAuth Integration Tests", () => {
         email: "admin@wpos.com",
         name: "Super Admin",
         role: "SUPER_ADMIN" as Role,
+        status: "ACTIVE" as UserStatus,
         warehouseId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
