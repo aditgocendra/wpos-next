@@ -28,7 +28,7 @@ export async function proxy(req: NextRequest) {
       if (token.role === "CASHIER") {
         return NextResponse.redirect(new URL("/pos", req.url));
       }
-      return NextResponse.redirect(new URL("/warehouses", req.url));
+      return NextResponse.redirect(new URL("/", req.url));
     }
     return NextResponse.next();
   }
@@ -49,7 +49,7 @@ export async function proxy(req: NextRequest) {
     if (role === "CASHIER") {
       return NextResponse.redirect(new URL("/pos", req.url));
     }
-    return NextResponse.redirect(new URL("/warehouses", req.url));
+    return NextResponse.next();
   }
 
   // RBAC route enforcement
@@ -59,11 +59,12 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL("/pos", req.url));
     }
   } else if (role === "WAREHOUSE_ADMIN") {
-    // WAREHOUSE_ADMIN can access /warehouses and /transfers
+    // WAREHOUSE_ADMIN can access dashboard (/), /warehouses and /transfers
+    const isDashboardRoute = pathname === "/";
     const isWarehouseRoute = pathname.startsWith("/warehouses");
     const isTransferRoute = pathname.startsWith("/transfers");
-    if (!isWarehouseRoute && !isTransferRoute) {
-      return NextResponse.redirect(new URL("/warehouses", req.url));
+    if (!isDashboardRoute && !isWarehouseRoute && !isTransferRoute) {
+      return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "SUPER_ADMIN") {
     // SUPER_ADMIN has full access to all routes
