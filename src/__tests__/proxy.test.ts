@@ -138,6 +138,10 @@ describe("Proxy & RBAC Route Protection", () => {
       const res1 = await proxy(req1);
       expect(res1.headers.get("location")).toBeNull();
 
+      const req1b = createMockRequest("http://localhost:3000/warehouse");
+      const res1b = await proxy(req1b);
+      expect(res1b.headers.get("location")).toBeNull();
+
       const req2 = createMockRequest("http://localhost:3000/transfers");
       const res2 = await proxy(req2);
       expect(res2.headers.get("location")).toBeNull();
