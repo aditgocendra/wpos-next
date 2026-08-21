@@ -16,12 +16,18 @@ enum Role {
   CASHIER
 }
 
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id          String     @id @default(cuid())
   name        String?
   email       String     @unique
   password    String
   role        Role       @default(CASHIER)
+  status      UserStatus @default(ACTIVE)
   warehouseId String?
   warehouse   Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   createdAt   DateTime   @default(now())

@@ -55,6 +55,7 @@ describe("AuthService Unit Tests", () => {
       name: "Admin User",
       password: "",
       role: "SUPER_ADMIN" as Role,
+      status: "ACTIVE",
       warehouseId: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -76,11 +77,26 @@ describe("AuthService Unit Tests", () => {
       expect(result?.id).toBe("user-123");
       expect(result?.email).toBe("admin@wpos.com");
       expect(result?.role).toBe("SUPER_ADMIN");
+      expect(result?.status).toBe("ACTIVE");
       expect((result as unknown as Record<string, unknown>)?.password).toBeUndefined();
       expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: "admin@wpos.com" },
         include: { warehouse: true },
       });
+    });
+
+    it("should return null if user is inactive", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        status: "INACTIVE",
+      });
+
+      const result = await authService.validateCredentials(
+        "admin@wpos.com",
+        "password123"
+      );
+
+      expect(result).toBeNull();
     });
 
     it("should return null if user is not found in database", async () => {

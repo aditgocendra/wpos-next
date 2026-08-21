@@ -1,12 +1,13 @@
 import bcrypt from "bcrypt";
 import { prisma as defaultPrisma } from "@/lib/prisma";
-import type { Role, Warehouse } from "@/generated/prisma/client";
+import type { Role, UserStatus, Warehouse } from "@/generated/prisma/client";
 
 export interface SafeUser {
   id: string;
   name: string | null;
   email: string;
   role: Role;
+  status: UserStatus;
   warehouseId: string | null;
   warehouse?: Warehouse | null;
   createdAt: Date;
@@ -52,6 +53,10 @@ export class AuthService {
 
     const user = await this.getUserByEmail(email);
     if (!user || !user.password) {
+      return null;
+    }
+
+    if (user.status === "INACTIVE") {
       return null;
     }
 
