@@ -21,6 +21,7 @@ import {
   BoxesIcon,
   UsersIcon,
   LayersIcon,
+  RowsIcon,
 } from "lucide-react"
 
 const data = {
@@ -52,8 +53,15 @@ const data = {
       ),
     },
     {
-      title: "Inventory & Categories",
+      title: "Categories",
       url: "/categories",
+      icon: (
+        <RowsIcon />
+      ),
+    },
+    {
+      title: "Inventory",
+      url: "/inventory",
       icon: (
         <BoxesIcon />
       ),
