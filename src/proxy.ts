@@ -59,12 +59,13 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL("/pos", req.url));
     }
   } else if (role === "WAREHOUSE_ADMIN") {
-    // WAREHOUSE_ADMIN can access dashboard (/), /warehouses and /transfers
+    // WAREHOUSE_ADMIN can access dashboard (/), /warehouses, /transfers, and /inventory
     const isDashboardRoute = pathname === "/";
     const isWarehouseRoute =
       pathname.startsWith("/warehouse") || pathname.startsWith("/warehouses");
     const isTransferRoute = pathname.startsWith("/transfers");
-    if (!isDashboardRoute && !isWarehouseRoute && !isTransferRoute) {
+    const isInventoryRoute = pathname.startsWith("/inventory");
+    if (!isDashboardRoute && !isWarehouseRoute && !isTransferRoute && !isInventoryRoute) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "SUPER_ADMIN") {
