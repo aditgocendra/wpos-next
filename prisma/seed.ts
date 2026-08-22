@@ -84,6 +84,68 @@ async function main() {
   });
 
   console.log(`✅ Cashier created: ${cashier.email} (${cashier.role})`);
+
+  // 6. Seed sample multi-level categories
+  const elcCategory = await prisma.category.upsert({
+    where: { code: "ELC" },
+    update: {},
+    create: {
+      name: "Electronic",
+      code: "ELC",
+    },
+  });
+
+  const audCategory = await prisma.category.upsert({
+    where: { code: "AUD" },
+    update: { parentId: elcCategory.id },
+    create: {
+      name: "Audio",
+      code: "AUD",
+      parentId: elcCategory.id,
+    },
+  });
+
+  await prisma.category.upsert({
+    where: { code: "EAR" },
+    update: { parentId: audCategory.id },
+    create: {
+      name: "Earphone",
+      code: "EAR",
+      parentId: audCategory.id,
+    },
+  });
+
+  await prisma.category.upsert({
+    where: { code: "SPK" },
+    update: { parentId: audCategory.id },
+    create: {
+      name: "Speaker",
+      code: "SPK",
+      parentId: audCategory.id,
+    },
+  });
+
+  const camCategory = await prisma.category.upsert({
+    where: { code: "CAM" },
+    update: { parentId: elcCategory.id },
+    create: {
+      name: "Camera",
+      code: "CAM",
+      parentId: elcCategory.id,
+    },
+  });
+
+  await prisma.category.upsert({
+    where: { code: "LEN" },
+    update: { parentId: camCategory.id },
+    create: {
+      name: "Lensa Kamera",
+      code: "LEN",
+      parentId: camCategory.id,
+    },
+  });
+
+  console.log("✅ Multi-level categories seeded: ELC > AUD > EAR, SPK; ELC > CAM > LEN");
   console.log("🌱 Database seeding completed successfully!");
 }
 
