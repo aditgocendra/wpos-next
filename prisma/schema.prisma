@@ -22,28 +22,33 @@ enum UserStatus {
 }
 
 model User {
-  id          String     @id @default(cuid())
-  name        String?
-  email       String     @unique
-  password    String
-  role        Role       @default(CASHIER)
-  status      UserStatus @default(ACTIVE)
-  warehouseId String?    @unique
-  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              String           @id @default(cuid())
+  name            String?
+  email           String           @unique
+  password        String
+  role            Role             @default(CASHIER)
+  status          UserStatus       @default(ACTIVE)
+  warehouseId     String?          @unique
+  warehouse       Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  productsCreated Product[]        @relation("ProductCreatedBy")
+  productsUpdated Product[]        @relation("ProductUpdatedBy")
+  variantsCreated ProductVariant[] @relation("VariantCreatedBy")
+  variantsUpdated ProductVariant[] @relation("VariantUpdatedBy")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@map("users")
 }
 
 model Warehouse {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  code      String?  @unique
+  code      String?   @unique
   address   String?
   admin     User?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@map("warehouses")
 }
@@ -55,8 +60,58 @@ model Category {
   parentId  String?
   parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
   children  Category[] @relation("CategoryHierarchy")
+  products  Product[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   @@map("categories")
+}
+
+model Product {
+  id           String           @id @default(cuid())
+  name         String
+  categoryId   String
+  warehouseId  String
+  totalStock   Int              @default(0)
+  avgCostPrice Float            @default(0.0) // Moving average cost price (HPP)
+  
+  category     Category         @relation(fields: [categoryId], references: [id])
+  warehouse    Warehouse        @relation(fields: [warehouseId], references: [id])
+  variants     ProductVariant[]
+  
+  createdById  String
+  updatedById  String?
+  createdBy    User             @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  updatedBy    User?            @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([categoryId])
+  @@index([warehouseId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id          String   @id @default(cuid())
+  productId   String
+  variantName String   // contoh: "Hitam", "Putih", "64GB", dll
+  sku         String   @unique // Format: CODE1-CODE2-CODE3-CODE4
+  stock       Int      @default(0)
+  priceSell   Float    @default(0.0)
+  priceCost   Float    @default(0.0)
+
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  createdById String
+  updatedById String?
+  createdBy   User     @relation("VariantCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("VariantUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productId])
+  @@index([sku])
+  @@map("product_variants")
 }

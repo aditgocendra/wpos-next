@@ -7,9 +7,12 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || session.user.role !== "SUPER_ADMIN") {
+    if (
+      !session ||
+      (session.user.role !== "SUPER_ADMIN" && session.user.role !== "WAREHOUSE_ADMIN")
+    ) {
       return NextResponse.json(
-        { error: "Forbidden: Super Admin access required" },
+        { error: "Forbidden: Super Admin atau Warehouse Admin access required" },
         { status: 403 }
       );
     }

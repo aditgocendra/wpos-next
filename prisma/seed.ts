@@ -146,6 +146,44 @@ async function main() {
   });
 
   console.log("✅ Multi-level categories seeded: ELC > AUD > EAR, SPK; ELC > CAM > LEN");
+
+  // 7. Seed sample products & variants
+  const earphoneProduct = await prisma.product.upsert({
+    where: { id: "seed-prod-earphone-wf1" },
+    update: {},
+    create: {
+      id: "seed-prod-earphone-wf1",
+      name: "Sony Wireless Earphone WF-1000XM5",
+      categoryId: (await prisma.category.findUniqueOrThrow({ where: { code: "EAR" } })).id,
+      warehouseId: mainWarehouse.id,
+      totalStock: 35,
+      avgCostPrice: 3200000,
+      createdById: superAdmin.id,
+      variants: {
+        create: [
+          {
+            variantName: "Black",
+            sku: "EAR-SON-WF1-BLK",
+            stock: 20,
+            priceCost: 3200000,
+            priceSell: 4399000,
+            createdById: superAdmin.id,
+          },
+          {
+            variantName: "Silver",
+            sku: "EAR-SON-WF1-SLV",
+            stock: 15,
+            priceCost: 3200000,
+            priceSell: 4399000,
+            createdById: superAdmin.id,
+          },
+        ],
+      },
+    },
+  });
+
+  console.log(`✅ Sample Product created: ${earphoneProduct.name}`);
+
   console.log("🌱 Database seeding completed successfully!");
 }
 

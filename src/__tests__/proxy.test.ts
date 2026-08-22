@@ -125,7 +125,7 @@ describe("Proxy & RBAC Route Protection", () => {
       expect(res.headers.get("location")).toBe("http://localhost:3000/pos");
     });
 
-    it("WAREHOUSE_ADMIN: should allow /, /warehouses and /transfers", async () => {
+    it("WAREHOUSE_ADMIN: should allow /, /warehouses, /transfers, and /inventory", async () => {
       vi.mocked(nextAuthJwt.getToken).mockResolvedValue(
         createMockToken("user-2", "WAREHOUSE_ADMIN")
       );
@@ -145,6 +145,10 @@ describe("Proxy & RBAC Route Protection", () => {
       const req2 = createMockRequest("http://localhost:3000/transfers");
       const res2 = await proxy(req2);
       expect(res2.headers.get("location")).toBeNull();
+
+      const req3 = createMockRequest("http://localhost:3000/inventory");
+      const res3 = await proxy(req3);
+      expect(res3.headers.get("location")).toBeNull();
     });
 
     it("WAREHOUSE_ADMIN: should redirect from /pos to /", async () => {
