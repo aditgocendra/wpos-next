@@ -356,14 +356,17 @@ export class InventoryService {
       skuSet.add(v.sku);
     }
 
-    // Check existing SKU in database
+    // Check existing SKU in database for the same warehouse
     const existingSkus = await this.db.productVariant.findMany({
-      where: { sku: { in: Array.from(skuSet) } },
+      where: {
+        sku: { in: Array.from(skuSet) },
+        product: { warehouseId: input.warehouseId },
+      },
       select: { sku: true },
     });
 
     if (existingSkus.length > 0) {
-      throw new Error(`SKU "${existingSkus[0].sku}" sudah digunakan pada produk lain`);
+      throw new Error(`SKU "${existingSkus[0].sku}" sudah digunakan pada produk lain di gudang ini`);
     }
 
     const { totalStock, avgCostPrice } = this.calculateStockAndAvgCost(sanitizedVariants);
@@ -492,18 +495,20 @@ export class InventoryService {
         skuSet.add(v.sku);
       }
 
-      // Check duplicate SKUs in DB belonging to other products
+      // Check duplicate SKUs in DB belonging to other products in the same warehouse
+      const currentWarehouseId = input.warehouseId || existing.warehouseId;
       const existingVariantsInDb = await this.db.productVariant.findMany({
         where: {
           sku: { in: Array.from(skuSet) },
           productId: { not: id },
+          product: { warehouseId: currentWarehouseId },
         },
         select: { sku: true },
       });
 
       if (existingVariantsInDb.length > 0) {
         throw new Error(
-          `SKU "${existingVariantsInDb[0].sku}" sudah digunakan pada produk lain`
+          `SKU "${existingVariantsInDb[0].sku}" sudah digunakan pada produk lain di gudang ini`
         );
       }
 
