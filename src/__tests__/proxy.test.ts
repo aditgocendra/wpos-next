@@ -103,18 +103,21 @@ describe("Proxy & RBAC Route Protection", () => {
   });
 
   describe("Role-Based Access Control (RBAC)", () => {
-    it("CASHIER: should allow /pos", async () => {
+    it("CASHIER: should allow /pos and /transaction", async () => {
       vi.mocked(nextAuthJwt.getToken).mockResolvedValue(
         createMockToken("user-1", "CASHIER")
       );
 
-      const req = createMockRequest("http://localhost:3000/pos");
-      const res = await proxy(req);
+      const reqPos = createMockRequest("http://localhost:3000/pos");
+      const resPos = await proxy(reqPos);
+      expect(resPos.headers.get("location")).toBeNull();
 
-      expect(res.headers.get("location")).toBeNull();
+      const reqTrx = createMockRequest("http://localhost:3000/transaction");
+      const resTrx = await proxy(reqTrx);
+      expect(resTrx.headers.get("location")).toBeNull();
     });
 
-    it("CASHIER: should redirect from /warehouses to /pos", async () => {
+    it("CASHIER: should redirect from /warehouses to /transaction", async () => {
       vi.mocked(nextAuthJwt.getToken).mockResolvedValue(
         createMockToken("user-1", "CASHIER")
       );
@@ -122,7 +125,7 @@ describe("Proxy & RBAC Route Protection", () => {
       const req = createMockRequest("http://localhost:3000/warehouses");
       const res = await proxy(req);
 
-      expect(res.headers.get("location")).toBe("http://localhost:3000/pos");
+      expect(res.headers.get("location")).toBe("http://localhost:3000/transaction");
     });
 
     it("WAREHOUSE_ADMIN: should allow /, /warehouses, /transfers, and /inventory", async () => {

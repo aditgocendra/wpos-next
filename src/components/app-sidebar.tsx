@@ -22,6 +22,7 @@ import {
   UsersIcon,
   LayersIcon,
   RowsIcon,
+  ScanBarcodeIcon,
 } from "lucide-react"
 
 const data = {
@@ -71,6 +72,13 @@ const data = {
       url: "/users",
       icon: (
         <UsersIcon />
+      ),
+    },
+    {
+      title: "Transaction",
+      url: "/transaction",
+      icon: (
+        <ScanBarcodeIcon />
       ),
     },
   ],
