@@ -55,6 +55,8 @@ import {
   WarehouseIcon,
   FilterIcon,
   Loader2Icon,
+  RotateCcwIcon,
+  XIcon,
 } from "lucide-react";
 import type { StockTransferData } from "@/services/transfer.service";
 import {
@@ -425,11 +427,21 @@ export function TransferTable() {
             <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Cari nama produk atau SKU..."
+              placeholder="Cari nomor transfer, produk atau SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 text-xs h-9"
+              className="pl-8 pr-8 text-xs h-9"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title="Hapus pencarian"
+              >
+                <XIcon className="size-4" />
+              </button>
+            )}
           </div>
 
           {/* Filter Warehouse */}
@@ -486,6 +498,25 @@ export function TransferTable() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Reset Filter Button */}
+          {(searchQuery ||
+            selectedWarehouseFilter !== "ALL" ||
+            selectedStatusFilter !== "ALL") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchQuery("");
+                setSelectedWarehouseFilter("ALL");
+                setSelectedStatusFilter("ALL");
+              }}
+              className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+            >
+              <RotateCcwIcon className="size-3.5" />
+              Reset Filter
+            </Button>
+          )}
         </div>
 
         <Button
@@ -608,11 +639,34 @@ export function TransferTable() {
                   colSpan={columns.length}
                   className="h-32 text-center text-sm text-muted-foreground"
                 >
-                  <div className="flex flex-col items-center justify-center gap-1">
+                  <div className="flex flex-col items-center justify-center gap-1.5 py-4">
                     <ArrowRightLeftIcon className="size-8 text-muted-foreground/40 mb-1" />
-                    <span className="font-medium">Tidak ada data transfer stok</span>
+                    <span className="font-medium text-foreground">
+                      {searchQuery ||
+                      selectedWarehouseFilter !== "ALL" ||
+                      selectedStatusFilter !== "ALL"
+                        ? "Tidak ada data transfer stok yang cocok dengan filter pencarian"
+                        : "Tidak ada data transfer stok"}
+                    </span>
                     <span className="text-xs text-muted-foreground">
-                      Buat draf transfer stok baru untuk memulai pemindahan barang.
+                      {searchQuery ||
+                      selectedWarehouseFilter !== "ALL" ||
+                      selectedStatusFilter !== "ALL" ? (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setSelectedWarehouseFilter("ALL");
+                            setSelectedStatusFilter("ALL");
+                          }}
+                          className="h-auto p-0 text-xs text-primary underline"
+                        >
+                          Reset semua filter dan pencarian
+                        </Button>
+                      ) : (
+                        "Buat draf transfer stok baru untuk memulai pemindahan barang."
+                      )}
                     </span>
                   </div>
                 </TableCell>
