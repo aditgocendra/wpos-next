@@ -9,10 +9,12 @@ export async function GET() {
 
     if (
       !session ||
-      (session.user.role !== "SUPER_ADMIN" && session.user.role !== "WAREHOUSE_ADMIN")
+      (session.user.role !== "SUPER_ADMIN" &&
+        session.user.role !== "WAREHOUSE_ADMIN" &&
+        session.user.role !== "CASHIER")
     ) {
       return NextResponse.json(
-        { error: "Forbidden: Super Admin atau Warehouse Admin access required" },
+        { error: "Forbidden: Super Admin, Warehouse Admin, atau Cashier access required" },
         { status: 403 }
       );
     }

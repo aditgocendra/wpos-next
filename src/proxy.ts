@@ -54,9 +54,15 @@ export async function proxy(req: NextRequest) {
 
   // RBAC route enforcement
   if (role === "CASHIER") {
-    // CASHIER can only access /pos routes
-    if (!pathname.startsWith("/pos")) {
-      return NextResponse.redirect(new URL("/pos", req.url));
+    // CASHIER can access /pos and /transaction routes
+    const isAllowed =
+      pathname.startsWith("/pos") ||
+      pathname.startsWith("/transaction") ||
+      pathname.startsWith("/api/transactions") ||
+      pathname.startsWith("/api/inventory") ||
+      pathname.startsWith("/api/warehouses");
+    if (!isAllowed) {
+      return NextResponse.redirect(new URL("/transaction", req.url));
     }
   } else if (role === "WAREHOUSE_ADMIN") {
     // WAREHOUSE_ADMIN can access dashboard (/), /warehouses, /transfers, and /inventory

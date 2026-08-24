@@ -23,7 +23,8 @@ const isStale =
   (!("product" in existingPrisma) ||
     !("productVariant" in existingPrisma) ||
     !("category" in existingPrisma) ||
-    !("stockTransfer" in existingPrisma));
+    !("stockTransfer" in existingPrisma) ||
+    !("transaction" in existingPrisma));
 
 export const prisma =
   !existingPrisma || isStale ? createPrismaClient() : existingPrisma;

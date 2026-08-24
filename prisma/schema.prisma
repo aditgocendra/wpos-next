@@ -29,22 +29,24 @@ enum TransferStatus {
 }
 
 model User {
-  id               String           @id @default(cuid())
-  name             String?
-  email            String           @unique
-  password         String
-  role             Role             @default(CASHIER)
-  status           UserStatus       @default(ACTIVE)
-  warehouseId      String?          @unique
-  warehouse        Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
-  productsCreated  Product[]        @relation("ProductCreatedBy")
-  productsUpdated  Product[]        @relation("ProductUpdatedBy")
-  variantsCreated  ProductVariant[] @relation("VariantCreatedBy")
-  variantsUpdated  ProductVariant[] @relation("VariantUpdatedBy")
-  transfersCreated StockTransfer[]  @relation("TransfersCreated")
-  transfersUpdated StockTransfer[]  @relation("TransfersUpdated")
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                  String           @id @default(cuid())
+  name                String?
+  email               String           @unique
+  password            String
+  role                Role             @default(CASHIER)
+  status              UserStatus       @default(ACTIVE)
+  warehouseId         String?          @unique
+  warehouse           Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  productsCreated     Product[]        @relation("ProductCreatedBy")
+  productsUpdated     Product[]        @relation("ProductUpdatedBy")
+  variantsCreated     ProductVariant[] @relation("VariantCreatedBy")
+  variantsUpdated     ProductVariant[] @relation("VariantUpdatedBy")
+  transfersCreated    StockTransfer[]  @relation("TransfersCreated")
+  transfersUpdated    StockTransfer[]  @relation("TransfersUpdated")
+  transactionsCreated Transaction[]    @relation("TransactionsCreated")
+  transactionsUpdated Transaction[]    @relation("TransactionsUpdated")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@map("users")
 }
@@ -58,6 +60,7 @@ model Warehouse {
   products             Product[]
   sourceTransfers      StockTransfer[] @relation("SourceTransfers")
   destinationTransfers StockTransfer[] @relation("DestinationTransfers")
+  transactions         Transaction[]
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
 
@@ -79,25 +82,26 @@ model Category {
 }
 
 model Product {
-  id            String              @id @default(cuid())
-  name          String
-  categoryId    String
-  warehouseId   String
-  totalStock    Int                 @default(0)
-  avgCostPrice  Float               @default(0.0) // Moving average cost price (HPP)
+  id               String              @id @default(cuid())
+  name             String
+  categoryId       String
+  warehouseId      String
+  totalStock       Int                 @default(0)
+  avgCostPrice     Float               @default(0.0) // Moving average cost price (HPP)
   
-  category      Category            @relation(fields: [categoryId], references: [id])
-  warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
-  variants      ProductVariant[]
-  transferItems StockTransferItem[]
+  category         Category            @relation(fields: [categoryId], references: [id])
+  warehouse        Warehouse           @relation(fields: [warehouseId], references: [id])
+  variants         ProductVariant[]
+  transferItems    StockTransferItem[]
+  transactionItems TransactionItem[]
   
-  createdById   String
-  updatedById   String?
-  createdBy     User                @relation("ProductCreatedBy", fields: [createdById], references: [id])
-  updatedBy     User?               @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
+  createdById      String
+  updatedById      String?
+  createdBy        User                @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  updatedBy        User?               @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
 
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@index([categoryId])
   @@index([warehouseId])
@@ -105,24 +109,25 @@ model Product {
 }
 
 model ProductVariant {
-  id            String              @id @default(cuid())
-  productId     String
-  variantName   String   // contoh: "Hitam", "Putih", "64GB", dll
-  sku           String   // Format: CODE1-CODE2-CODE3-CODE4
-  stock         Int      @default(0)
-  priceSell     Float    @default(0.0)
-  priceCost     Float    @default(0.0)
+  id               String              @id @default(cuid())
+  productId        String
+  variantName      String   // contoh: "Hitam", "Putih", "64GB", dll
+  sku              String   // Format: CODE1-CODE2-CODE3-CODE4
+  stock            Int      @default(0)
+  priceSell        Float    @default(0.0)
+  priceCost        Float    @default(0.0)
 
-  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  transferItems StockTransferItem[]
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  transferItems    StockTransferItem[]
+  transactionItems TransactionItem[]
   
-  createdById   String
-  updatedById   String?
-  createdBy     User                @relation("VariantCreatedBy", fields: [createdById], references: [id])
-  updatedBy     User?               @relation("VariantUpdatedBy", fields: [updatedById], references: [id])
+  createdById      String
+  updatedById      String?
+  createdBy        User                @relation("VariantCreatedBy", fields: [createdById], references: [id])
+  updatedBy        User?               @relation("VariantUpdatedBy", fields: [updatedById], references: [id])
 
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@unique([productId, sku])
   @@index([productId])
@@ -170,4 +175,47 @@ model StockTransferItem {
   @@index([productId])
   @@index([variantId])
   @@map("stock_transfer_items")
+}
+
+model Transaction {
+  id                String            @id @default(cuid())
+  transactionNumber String            @unique
+  warehouseId       String
+  warehouse         Warehouse         @relation(fields: [warehouseId], references: [id])
+  totalAmount       Float             @default(0.0)
+  notes             String?
+  createdById       String
+  updatedById       String?
+  createdBy         User              @relation("TransactionsCreated", fields: [createdById], references: [id])
+  updatedBy         User?             @relation("TransactionsUpdated", fields: [updatedById], references: [id])
+  items             TransactionItem[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([warehouseId])
+  @@index([createdById])
+  @@map("transactions")
+}
+
+model TransactionItem {
+  id            String         @id @default(cuid())
+  transactionId String
+  productId     String
+  variantId     String
+  quantity      Int
+  price         Float          @default(0.0) // Selling price snapshot
+  totalPrice    Float          @default(0.0) // price * quantity
+  costPrice     Float          @default(0.0) // Cost price snapshot (HPP)
+  
+  transaction   Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id])
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([transactionId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("transaction_items")
 }
