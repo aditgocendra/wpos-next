@@ -57,13 +57,16 @@ export class WarehouseService {
     createdAt: Date;
     updatedAt: Date;
     admin?: WarehouseUserInfo | null;
+    _count?: {
+      products: number;
+    };
   }): WarehouseItem {
     return {
       id: warehouse.id,
       name: warehouse.name,
       code: warehouse.code,
       address: warehouse.address,
-      productsCount: 0, // Placeholder until inventory/products model is implemented
+      productsCount: warehouse._count?.products ?? 0,
       adminUser: warehouse.admin || null,
       createdAt: warehouse.createdAt,
       updatedAt: warehouse.updatedAt,
@@ -83,6 +86,11 @@ export class WarehouseService {
             status: true,
           },
         },
+        _count: {
+          select: {
+            products: true,
+          },
+        },
       },
     });
 
@@ -100,6 +108,11 @@ export class WarehouseService {
             email: true,
             role: true,
             status: true,
+          },
+        },
+        _count: {
+          select: {
+            products: true,
           },
         },
       },
@@ -168,6 +181,11 @@ export class WarehouseService {
             email: true,
             role: true,
             status: true,
+          },
+        },
+        _count: {
+          select: {
+            products: true,
           },
         },
       },

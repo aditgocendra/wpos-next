@@ -128,6 +128,11 @@ export class CategoryService {
           },
           orderBy: { name: "asc" },
         },
+        _count: {
+          select: {
+            products: true,
+          },
+        },
       },
     });
 
@@ -149,7 +154,7 @@ export class CategoryService {
         childrenCount: cat.children.length,
         fullPath: hierarchy.fullPath,
         level: hierarchy.level,
-        productsCount: 0, // Placeholder until products/inventory table is linked
+        productsCount: (cat as any)._count?.products ?? 0,
         createdAt: cat.createdAt,
         updatedAt: cat.updatedAt,
       };
@@ -174,6 +179,11 @@ export class CategoryService {
             code: true,
           },
           orderBy: { name: "asc" },
+        },
+        _count: {
+          select: {
+            products: true,
+          },
         },
       },
     });
@@ -206,7 +216,7 @@ export class CategoryService {
       childrenCount: category.children.length,
       fullPath: hierarchy.fullPath,
       level: hierarchy.level,
-      productsCount: 0,
+      productsCount: (category as any)._count?.products ?? 0,
       createdAt: category.createdAt,
       updatedAt: category.updatedAt,
     };

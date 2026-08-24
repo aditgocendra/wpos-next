@@ -90,6 +90,18 @@ describe("CategoryService Unit Tests", () => {
       expect(grandchild.level).toBe(2);
       expect(grandchild.productsCount).toBe(0);
     });
+
+    it("should map _count.products to productsCount correctly", async () => {
+      mockPrisma.category.findMany.mockResolvedValue([
+        {
+          ...sampleRootCategory,
+          _count: { products: 42 },
+        },
+      ]);
+
+      const result = await categoryService.getAllCategories();
+      expect(result[0].productsCount).toBe(42);
+    });
   });
 
   describe("getCategoryById", () => {
