@@ -33,8 +33,14 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // If user is NOT authenticated, redirect to /sign-in
+  // If user is NOT authenticated, redirect to /sign-in (or return 401 JSON for API)
   if (!token) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json(
+        { error: "Unauthorized: Silakan masuk terlebih dahulu" },
+        { status: 401 }
+      );
+    }
     const signInUrl = new URL("/sign-in", req.url);
     if (pathname !== "/") {
       signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
@@ -44,34 +50,56 @@ export async function proxy(req: NextRequest) {
 
   const role = token.role;
 
-  // Root path redirect based on role
-  if (pathname === "/") {
+  // Handle API route RBAC without HTML redirects
+  if (pathname.startsWith("/api/")) {
     if (role === "CASHIER") {
-      return NextResponse.redirect(new URL("/pos", req.url));
+      const isAllowedApi =
+        pathname.startsWith("/api/transactions") ||
+        pathname.startsWith("/api/inventory") ||
+        pathname.startsWith("/api/warehouses");
+      if (!isAllowedApi) {
+        return NextResponse.json(
+          { error: "Forbidden: Akses ditolak untuk role Cashier" },
+          { status: 403 }
+        );
+      }
+    } else if (role === "WAREHOUSE_ADMIN") {
+      const isAllowedApi =
+        pathname.startsWith("/api/warehouses") ||
+        pathname.startsWith("/api/transfers") ||
+        pathname.startsWith("/api/inventory") ||
+        pathname.startsWith("/api/categories");
+      if (!isAllowedApi) {
+        return NextResponse.json(
+          { error: "Forbidden: Akses ditolak untuk role Warehouse Admin" },
+          { status: 403 }
+        );
+      }
     }
     return NextResponse.next();
   }
 
-  // RBAC route enforcement
+  // Root path allowed for all authenticated roles (SUPER_ADMIN, WAREHOUSE_ADMIN, CASHIER)
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // RBAC page route enforcement
   if (role === "CASHIER") {
-    // CASHIER can access /pos and /transaction routes
+    // CASHIER can access dashboard (/), /pos, and /transaction(s)
     const isAllowed =
       pathname.startsWith("/pos") ||
       pathname.startsWith("/transaction") ||
-      pathname.startsWith("/api/transactions") ||
-      pathname.startsWith("/api/inventory") ||
-      pathname.startsWith("/api/warehouses");
+      pathname.startsWith("/transactions");
     if (!isAllowed) {
-      return NextResponse.redirect(new URL("/transaction", req.url));
+      return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "WAREHOUSE_ADMIN") {
-    // WAREHOUSE_ADMIN can access dashboard (/), /warehouses, /transfers, and /inventory
-    const isDashboardRoute = pathname === "/";
-    const isWarehouseRoute =
-      pathname.startsWith("/warehouse") || pathname.startsWith("/warehouses");
-    const isTransferRoute = pathname.startsWith("/transfers");
+    // WAREHOUSE_ADMIN can access dashboard (/), /transfers, and /inventory (warehouses & categories management are hidden)
+    const isTransferRoute =
+      pathname.startsWith("/transfers") || pathname.startsWith("/transfer");
     const isInventoryRoute = pathname.startsWith("/inventory");
-    if (!isDashboardRoute && !isWarehouseRoute && !isTransferRoute && !isInventoryRoute) {
+    if (!isTransferRoute && !isInventoryRoute) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "SUPER_ADMIN") {
