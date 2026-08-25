@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useSession } from "next-auth/react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
@@ -25,66 +26,72 @@ import {
   ScanBarcodeIcon,
 } from "lucide-react"
 
-const data = {
-  user: {
-    name: "Admin User",
-    email: "admin@wpos.com",
-    avatar: "/avatars/admin.jpg",
+const allNavItems = [
+  {
+    title: "Dashboard",
+    url: "/",
+    icon: <LayoutDashboardIcon />,
+    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN", "CASHIER"],
   },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/",
-      icon: (
-        <LayoutDashboardIcon />
-      ),
-    },
-    {
-      title: "Warehouses",
-      url: "/warehouse",
-      icon: (
-        <WarehouseIcon />
-      ),
-    },
-    {
-      title: "Stock Transfers",
-      url: "/transfers",
-      icon: (
-        <ArrowLeftRightIcon />
-      ),
-    },
-    {
-      title: "Categories",
-      url: "/categories",
-      icon: (
-        <RowsIcon />
-      ),
-    },
-    {
-      title: "Inventory",
-      url: "/inventory",
-      icon: (
-        <BoxesIcon />
-      ),
-    },
-    {
-      title: "User Management",
-      url: "/users",
-      icon: (
-        <UsersIcon />
-      ),
-    },
-    {
-      title: "Transaction",
-      url: "/transaction",
-      icon: (
-        <ScanBarcodeIcon />
-      ),
-    },
-  ],
-}
+  {
+    title: "Warehouses",
+    url: "/warehouse",
+    icon: <WarehouseIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Stock Transfers",
+    url: "/transfers",
+    icon: <ArrowLeftRightIcon />,
+    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN"],
+  },
+  {
+    title: "Categories",
+    url: "/categories",
+    icon: <RowsIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Inventory",
+    url: "/inventory",
+    icon: <BoxesIcon />,
+    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN"],
+  },
+  {
+    title: "User Management",
+    url: "/users",
+    icon: <UsersIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Transaction",
+    url: "/transaction",
+    icon: <ScanBarcodeIcon />,
+    roles: ["SUPER_ADMIN", "CASHIER"],
+  },
+]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const { data: session } = useSession()
+
+  const role = session?.user?.role
+
+  const filteredNavItems = React.useMemo(() => {
+    if (!role) {
+      return allNavItems
+    }
+    return allNavItems.filter((item) => !item.roles || item.roles.includes(role))
+  }, [role])
+
+  const user = React.useMemo(() => {
+    return {
+      name: session?.user?.name || "Admin User",
+      email: session?.user?.email || "admin@wpos.com",
+      avatar: (session?.user as { image?: string })?.image || "",
+      role: session?.user?.role || "",
+    }
+  }, [session])
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -101,11 +108,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={filteredNavItems} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )
 }
+
