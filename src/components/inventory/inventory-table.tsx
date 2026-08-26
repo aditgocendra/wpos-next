@@ -161,7 +161,9 @@ export function InventoryTable() {
     let result = products;
 
     if (selectedWarehouseFilter !== "ALL") {
-      result = result.filter((p) => p.warehouseId === selectedWarehouseFilter);
+      result = result.filter((p) => 
+        p.variants.some(v => v.warehouseStocks?.some(ws => ws.warehouseId === selectedWarehouseFilter))
+      );
     }
 
     if (selectedCategoryFilter !== "ALL") {
@@ -175,7 +177,6 @@ export function InventoryTable() {
           p.name.toLowerCase().includes(q) ||
           p.category.name.toLowerCase().includes(q) ||
           p.category.code.toLowerCase().includes(q) ||
-          p.warehouse.name.toLowerCase().includes(q) ||
           p.variants.some(
             (v) =>
               v.sku.toLowerCase().includes(q) ||
@@ -264,19 +265,7 @@ export function InventoryTable() {
           );
         },
       },
-      {
-        header: "Gudang",
-        accessorKey: "warehouse",
-        cell: ({ row }) => {
-          const wh = row.original.warehouse;
-          return (
-            <div className="flex items-center gap-1.5 text-sm">
-              <WarehouseIcon className="size-3.5 text-muted-foreground shrink-0" />
-              <span className="truncate max-w-[150px]">{wh.name}</span>
-            </div>
-          );
-        },
-      },
+
       {
         header: "Total Stok",
         accessorKey: "totalStock",
@@ -659,7 +648,7 @@ export function InventoryTable() {
                                       Stok
                                     </p>
                                     <p className="font-bold text-foreground">
-                                      {variant.stock}
+                                      {variant.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0}
                                     </p>
                                   </div>
                                   <div>
@@ -811,6 +800,7 @@ export function InventoryTable() {
         open={addStockDialogOpen}
         onOpenChange={setAddStockDialogOpen}
         product={selectedProductForAddStock}
+        warehouses={warehouses}
         onSuccess={fetchData}
       />
 

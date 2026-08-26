@@ -38,6 +38,14 @@ describe("TransferService Unit Tests", () => {
     variantName: "Size L Red",
     sku: "CLO-FLA-L-RED",
     stock: 20,
+    warehouseStocks: [
+      {
+        id: "pvs-1",
+        variantId: "var-1",
+        warehouseId: "wh-source",
+        stock: 20,
+      },
+    ],
     priceSell: 150000,
     priceCost: 100000,
     product: sampleProductSource,
@@ -89,6 +97,10 @@ describe("TransferService Unit Tests", () => {
         create: vi.fn(),
         update: vi.fn(),
         deleteMany: vi.fn(),
+      },
+      productVariantStock: {
+        update: vi.fn(),
+        upsert: vi.fn(),
       },
       stockTransfer: {
         findUnique: vi.fn(),
@@ -151,7 +163,14 @@ describe("TransferService Unit Tests", () => {
       mockPrisma.warehouse.findUnique.mockResolvedValue(sampleWarehouseSource);
       mockPrisma.productVariant.findUnique.mockResolvedValue({
         ...sampleVariantSource,
-        stock: 2, // Available is 2
+        warehouseStocks: [
+          {
+            id: "pvs-1",
+            variantId: "var-1",
+            warehouseId: "wh-source",
+            stock: 2, // Available is 2
+          },
+        ],
       });
 
       await expect(
@@ -172,31 +191,6 @@ describe("TransferService Unit Tests", () => {
       mockPrisma.stockTransfer.findUnique.mockResolvedValue(sampleTransfer);
       mockPrisma.productVariant.findUnique.mockResolvedValue(sampleVariantSource);
 
-      mockPrisma.product.findFirst.mockResolvedValue(null);
-      mockPrisma.product.create.mockResolvedValue({
-        id: "prod-dest-1",
-        name: "Kemeja Flanel",
-        categoryId: "cat-cloth",
-        warehouseId: "wh-dest",
-        totalStock: 0,
-        avgCostPrice: 100000,
-      });
-
-      mockPrisma.productVariant.findFirst.mockResolvedValue(null);
-      mockPrisma.productVariant.create.mockResolvedValue({
-        id: "var-dest-1",
-        productId: "prod-dest-1",
-        variantName: "Size L Red",
-        sku: "CLO-FLA-L-RED", // Exact same SKU
-        stock: 5,
-        priceSell: 150000,
-        priceCost: 100000,
-      });
-
-      mockPrisma.productVariant.findMany.mockResolvedValue([
-        { stock: 5, priceCost: 100000 },
-      ]);
-
       mockPrisma.stockTransfer.update.mockResolvedValue({
         ...sampleTransfer,
         status: "TRANSFERED",
@@ -205,27 +199,18 @@ describe("TransferService Unit Tests", () => {
       const result = await transferService.executeTransfer("trf-123", "usr-admin");
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
-      // Decrement source variant
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith(
+      // Decrement source variant stock in ProductVariantStock
+      expect(mockPrisma.productVariantStock.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: "var-1" },
+          where: { id: "pvs-1" },
           data: { stock: { decrement: 5 } },
         })
       );
-      // Decrement source product
-      expect(mockPrisma.product.update).toHaveBeenCalledWith(
+      // Increment destination variant stock in ProductVariantStock
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: "prod-1" },
-          data: { totalStock: { decrement: 5 } },
-        })
-      );
-      // Create destination variant with EXACT same SKU
-      expect(mockPrisma.productVariant.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            sku: "CLO-FLA-L-RED",
-            stock: 5,
-          }),
+          where: { variantId_warehouseId: { variantId: "var-1", warehouseId: "wh-dest" } },
+          update: { stock: { increment: 5 } },
         })
       );
       expect(result.status).toBe("TRANSFERED");
@@ -236,7 +221,14 @@ describe("TransferService Unit Tests", () => {
       // Source variant stock has dropped to 2
       mockPrisma.productVariant.findUnique.mockResolvedValue({
         ...sampleVariantSource,
-        stock: 2,
+        warehouseStocks: [
+          {
+            id: "pvs-1",
+            variantId: "var-1",
+            warehouseId: "wh-source",
+            stock: 2,
+          },
+        ],
       });
 
       await expect(

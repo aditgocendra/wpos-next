@@ -155,27 +155,34 @@ async function main() {
       id: "seed-prod-earphone-wf1",
       name: "Sony Wireless Earphone WF-1000XM5",
       categoryId: (await prisma.category.findUniqueOrThrow({ where: { code: "EAR" } })).id,
-      warehouseId: mainWarehouse.id,
-      totalStock: 35,
-      avgCostPrice: 3200000,
       createdById: superAdmin.id,
       variants: {
         create: [
           {
             variantName: "Black",
             sku: "EAR-SON-WF1-BLK",
-            stock: 20,
             priceCost: 3200000,
             priceSell: 4399000,
             createdById: superAdmin.id,
+            warehouseStocks: {
+              create: {
+                warehouseId: mainWarehouse.id,
+                stock: 20,
+              }
+            }
           },
           {
             variantName: "Silver",
             sku: "EAR-SON-WF1-SLV",
-            stock: 15,
             priceCost: 3200000,
             priceSell: 4399000,
             createdById: superAdmin.id,
+            warehouseStocks: {
+              create: {
+                warehouseId: mainWarehouse.id,
+                stock: 15,
+              }
+            }
           },
         ],
       },

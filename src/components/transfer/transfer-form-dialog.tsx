@@ -21,14 +21,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  ArrowRightLeftIcon,
+  WarehouseIcon,
   PlusIcon,
   Trash2Icon,
   Loader2Icon,
-  ArrowRightLeftIcon,
-  AlertCircleIcon,
   PackageIcon,
-  WarehouseIcon,
+  AlertCircleIcon,
 } from "lucide-react";
+
 import type { StockTransferData } from "@/services/transfer.service";
 import type { ProductItem } from "@/services/inventory.service";
 
@@ -78,7 +79,11 @@ export function TransferFormDialog({
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Fetch products for selected source warehouse
+  const getVariantStock = React.useCallback((variant: any, warehouseId: string) => {
+    if (!variant || !variant.warehouseStocks) return 0;
+    return variant.warehouseStocks.find((ws: any) => ws.warehouseId === warehouseId)?.stock || 0;
+  }, []);
+
   const fetchProductsForWarehouse = React.useCallback(
     async (warehouseId: string) => {
       if (!warehouseId) {
@@ -103,7 +108,6 @@ export function TransferFormDialog({
     []
   );
 
-  // Initialize or reset state when dialog opens/closes or transfer prop changes
   React.useEffect(() => {
     if (open) {
       setError(null);
@@ -114,11 +118,11 @@ export function TransferFormDialog({
 
         fetchProductsForWarehouse(transfer.sourceWarehouseId).then(() => {
           setItems(
-            transfer.items.map((it) => ({
+            transfer.items.map((it: any) => ({
               productId: it.productId,
               variantId: it.variantId,
               quantity: it.quantity,
-              maxStock: 9999, // default until products load
+              maxStock: 9999,
             }))
           );
         });
@@ -132,13 +136,11 @@ export function TransferFormDialog({
     }
   }, [open, transfer, fetchProductsForWarehouse]);
 
-  // When source warehouse changes in Create mode
   const handleSourceWarehouseChange = (whId: string) => {
     setSourceWarehouseId(whId);
     if (destinationWarehouseId === whId) {
       setDestinationWarehouseId("");
     }
-    // Reset items
     setItems([{ productId: "", variantId: "", quantity: 1, maxStock: 0 }]);
     fetchProductsForWarehouse(whId);
   };
@@ -165,18 +167,16 @@ export function TransferFormDialog({
       .filter(Boolean);
 
     if (selectedProd && selectedProd.variants.length > 0) {
-      // Find unselected variants for this product
       const unselectedVariants = selectedProd.variants.filter(
         (v) => !selectedVariantIdsInOtherRows.includes(v.id)
       );
 
-      // Pick first unselected variant with stock > 0, or fallback to first unselected variant
       const availableVariant =
-        unselectedVariants.find((v) => v.stock > 0) || unselectedVariants[0];
+        unselectedVariants.find((v) => getVariantStock(v, sourceWarehouseId) > 0) || unselectedVariants[0];
 
       if (availableVariant) {
         defaultVariantId = availableVariant.id;
-        defaultMaxStock = availableVariant.stock;
+        defaultMaxStock = getVariantStock(availableVariant, sourceWarehouseId);
       }
     }
 
@@ -199,7 +199,7 @@ export function TransferFormDialog({
     const row = items[index];
     const selectedProd = availableProducts.find((p) => p.id === row.productId);
     const selectedVar = selectedProd?.variants.find((v) => v.id === variantId);
-    const maxStock = selectedVar ? selectedVar.stock : 0;
+    const maxStock = selectedVar ? getVariantStock(selectedVar, sourceWarehouseId) : 0;
 
     setItems((prev) =>
       prev.map((r, idx) =>
@@ -226,7 +226,6 @@ export function TransferFormDialog({
     e.preventDefault();
     setError(null);
 
-    // Validation
     if (!sourceWarehouseId) {
       setError("Gudang asal wajib dipilih");
       return;
@@ -305,7 +304,6 @@ export function TransferFormDialog({
     }
   };
 
-  // Calculate total variants available across all products in source warehouse
   const totalAvailableVariants = availableProducts.reduce(
     (sum, p) => sum + p.variants.length,
     0
@@ -341,7 +339,6 @@ export function TransferFormDialog({
             </div>
           )}
 
-          {/* Warehouse Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-semibold flex items-center gap-1.5">
@@ -395,7 +392,6 @@ export function TransferFormDialog({
             </div>
           </div>
 
-          {/* Items Section */}
           <div className="space-y-4 rounded-xl border p-4 bg-muted/20">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 font-semibold text-sm">
@@ -431,13 +427,11 @@ export function TransferFormDialog({
             ) : (
               <div className="space-y-3">
                 {items.map((row, index) => {
-                  // Variant IDs selected in other rows
                   const selectedVariantIdsInOtherRows = items
                     .filter((_, idx) => idx !== index)
                     .map((r) => r.variantId)
                     .filter(Boolean);
 
-                  // Products with at least 1 unselected variant, or currently selected product for this row
                   const selectableProducts = availableProducts.filter((p) => {
                     if (p.id === row.productId) return true;
                     return p.variants.some(
@@ -449,7 +443,6 @@ export function TransferFormDialog({
                     (p) => p.id === row.productId
                   );
 
-                  // Variants of this product that are not yet selected in other rows
                   const selectableVariants = selectedProduct?.variants.filter(
                     (v) =>
                       v.id === row.variantId ||
@@ -459,10 +452,11 @@ export function TransferFormDialog({
                   const selectedVariant = selectedProduct?.variants.find(
                     (v) => v.id === row.variantId
                   );
+                  const selectedVariantStock = selectedVariant ? getVariantStock(selectedVariant, sourceWarehouseId) : 0;
                   const isOverStock =
                     typeof row.quantity === "number" &&
                     selectedVariant &&
-                    row.quantity > selectedVariant.stock;
+                    row.quantity > selectedVariantStock;
 
                   return (
                     <div
@@ -487,7 +481,6 @@ export function TransferFormDialog({
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                        {/* Select Produk */}
                         <div className="md:col-span-4 space-y-1.5">
                           <Label className="text-xs">
                             Produk <span className="text-destructive">*</span>
@@ -515,7 +508,6 @@ export function TransferFormDialog({
                           </Select>
                         </div>
 
-                        {/* Select Variant */}
                         <div className="md:col-span-5 space-y-1.5">
                           <Label className="text-xs">
                             Variant Produk <span className="text-destructive">*</span>
@@ -532,7 +524,8 @@ export function TransferFormDialog({
                             </SelectTrigger>
                             <SelectContent>
                               {selectableVariants?.map((v) => {
-                                const isOutOfStock = v.stock <= 0;
+                                const variantStock = getVariantStock(v, sourceWarehouseId);
+                                const isOutOfStock = variantStock <= 0;
                                 return (
                                   <SelectItem
                                     key={v.id}
@@ -540,7 +533,7 @@ export function TransferFormDialog({
                                     disabled={isOutOfStock}
                                     className="text-xs"
                                   >
-                                    {v.variantName} (SKU: {v.sku}) - Stok: {v.stock}
+                                    {v.variantName} (SKU: {v.sku}) - Stok: {variantStock}
                                     {isOutOfStock ? " [Habis]" : ""}
                                   </SelectItem>
                                 );
@@ -549,7 +542,6 @@ export function TransferFormDialog({
                           </Select>
                         </div>
 
-                        {/* Input Jumlah Transfer */}
                         <div className="md:col-span-3 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <Label className="text-xs">
@@ -557,19 +549,19 @@ export function TransferFormDialog({
                             </Label>
                             {selectedVariant && (
                               <span className="text-[11px] text-muted-foreground">
-                                Tersedia: <strong>{selectedVariant.stock}</strong>
+                                Tersedia: <strong>{selectedVariantStock}</strong>
                               </span>
                             )}
                           </div>
                           <Input
                             type="number"
                             min={1}
-                            max={selectedVariant ? selectedVariant.stock : undefined}
+                            max={selectedVariant ? selectedVariantStock : undefined}
                             value={row.quantity}
                             onChange={(e) =>
                               handleQuantityChange(index, e.target.value)
                             }
-                            disabled={!row.variantId || (selectedVariant && selectedVariant.stock <= 0)}
+                            disabled={!row.variantId || (selectedVariant && selectedVariantStock <= 0)}
                             placeholder="Qty"
                             className={`h-9 text-xs ${
                               isOverStock ? "border-destructive focus-visible:ring-destructive" : ""
@@ -580,7 +572,7 @@ export function TransferFormDialog({
 
                       {isOverStock && (
                         <p className="text-[11px] text-destructive font-medium">
-                          ⚠️ Jumlah yang ditransfer tidak boleh melebihi stok produk di gudang asal ({selectedVariant?.stock} unit).
+                          ⚠️ Jumlah yang ditransfer tidak boleh melebihi stok produk di gudang asal ({selectedVariantStock} unit).
                         </p>
                       )}
                     </div>
@@ -590,7 +582,6 @@ export function TransferFormDialog({
             )}
           </div>
 
-          {/* Notes */}
           <div className="space-y-2">
             <Label className="text-sm font-semibold">
               Catatan Transfer (Opsional)

@@ -310,6 +310,7 @@ export class TransactionService {
           where: { id: item.variantId },
           include: {
             product: true,
+            warehouseStocks: { where: { warehouseId: input.warehouseId } }
           },
         });
 
@@ -321,20 +322,17 @@ export class TransactionService {
           throw new Error(`Varian ${variant.variantName} tidak cocok dengan produk yang dipilih`);
         }
 
-        if (variant.product.warehouseId !== input.warehouseId) {
-          throw new Error(
-            `Produk ${variant.product.name} tidak berada pada gudang yang dipilih`
-          );
-        }
+        const stockRecord = variant.warehouseStocks[0];
+        const currentStock = stockRecord ? stockRecord.stock : 0;
 
-        if (variant.stock < item.quantity) {
+        if (currentStock < item.quantity) {
           throw new Error(
-            `INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian ${variant.variantName} pada produk ${variant.product.name}. (Tersedia: ${variant.stock}, Diminta: ${item.quantity})`
+            `INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian ${variant.variantName} pada produk ${variant.product.name}. (Tersedia: ${currentStock}, Diminta: ${item.quantity})`
           );
         }
 
         const price = variant.priceSell || 0;
-        const costPrice = variant.priceCost || variant.product.avgCostPrice || 0;
+        const costPrice = variant.priceCost || 0; // Removed avgCostPrice fallback since product no longer has it
         const itemTotalPrice = price * item.quantity;
 
         totalAmount += itemTotalPrice;
@@ -349,19 +347,10 @@ export class TransactionService {
         });
 
         // 3. Atomically decrement stock
-        await tx.productVariant.update({
-          where: { id: item.variantId },
+        await tx.productVariantStock.update({
+          where: { id: stockRecord.id },
           data: {
             stock: {
-              decrement: item.quantity,
-            },
-          },
-        });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            totalStock: {
               decrement: item.quantity,
             },
           },
@@ -473,22 +462,18 @@ export class TransactionService {
 
         // 1. Rollback previous stock
         for (const prevItem of existing.items) {
-          await tx.productVariant.update({
-            where: { id: prevItem.variantId },
-            data: {
+          await tx.productVariantStock.upsert({
+            where: { variantId_warehouseId: { variantId: prevItem.variantId, warehouseId: existing.warehouseId } },
+            update: {
               stock: {
                 increment: prevItem.quantity,
               },
             },
-          });
-
-          await tx.product.update({
-            where: { id: prevItem.productId },
-            data: {
-              totalStock: {
-                increment: prevItem.quantity,
-              },
-            },
+            create: {
+              variantId: prevItem.variantId,
+              warehouseId: existing.warehouseId,
+              stock: prevItem.quantity
+            }
           });
         }
 
@@ -513,6 +498,7 @@ export class TransactionService {
             where: { id: item.variantId },
             include: {
               product: true,
+              warehouseStocks: { where: { warehouseId: targetWarehouseId } }
             },
           });
 
@@ -526,20 +512,17 @@ export class TransactionService {
             );
           }
 
-          if (variant.product.warehouseId !== targetWarehouseId) {
-            throw new Error(
-              `Produk ${variant.product.name} tidak berada pada gudang yang dipilih`
-            );
-          }
+          const stockRecord = variant.warehouseStocks[0];
+          const currentStock = stockRecord ? stockRecord.stock : 0;
 
-          if (variant.stock < item.quantity) {
+          if (currentStock < item.quantity) {
             throw new Error(
-              `INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian ${variant.variantName} pada produk ${variant.product.name}. (Tersedia: ${variant.stock}, Diminta: ${item.quantity})`
+              `INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian ${variant.variantName} pada produk ${variant.product.name}. (Tersedia: ${currentStock}, Diminta: ${item.quantity})`
             );
           }
 
           const price = variant.priceSell || 0;
-          const costPrice = variant.priceCost || variant.product.avgCostPrice || 0;
+          const costPrice = variant.priceCost || 0;
           const itemTotalPrice = price * item.quantity;
 
           totalAmount += itemTotalPrice;
@@ -553,19 +536,10 @@ export class TransactionService {
             costPrice,
           });
 
-          await tx.productVariant.update({
-            where: { id: item.variantId },
+          await tx.productVariantStock.update({
+            where: { id: stockRecord.id },
             data: {
               stock: {
-                decrement: item.quantity,
-              },
-            },
-          });
-
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              totalStock: {
                 decrement: item.quantity,
               },
             },
@@ -664,22 +638,18 @@ export class TransactionService {
 
       // 1. Restore stock
       for (const item of existing.items) {
-        await tx.productVariant.update({
-          where: { id: item.variantId },
-          data: {
+        await tx.productVariantStock.upsert({
+          where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: existing.warehouseId } },
+          update: {
             stock: {
               increment: item.quantity,
             },
           },
-        });
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            totalStock: {
-              increment: item.quantity,
-            },
-          },
+          create: {
+            variantId: item.variantId,
+            warehouseId: existing.warehouseId,
+            stock: item.quantity
+          }
         });
       }
 

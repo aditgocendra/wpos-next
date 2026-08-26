@@ -154,14 +154,13 @@ export class TransferService {
       if (!item.productId || !item.variantId) {
         throw new Error("Produk dan varian wajib dipilih untuk setiap item");
       }
-
       if (!item.quantity || item.quantity <= 0) {
         throw new Error("Kuantitas transfer harus lebih besar dari 0");
       }
 
       const variant = await this.db.productVariant.findUnique({
         where: { id: item.variantId },
-        include: { product: true },
+        include: { product: true, warehouseStocks: { where: { warehouseId: sourceWarehouseId } } },
       });
 
       if (!variant) {
@@ -169,21 +168,14 @@ export class TransferService {
       }
 
       if (variant.productId !== item.productId) {
-        throw new Error(
-          `Varian "${variant.variantName}" tidak cocok dengan produk yang dipilih`
-        );
+        throw new Error(`Varian "${variant.variantName}" tidak cocok dengan produk yang dipilih`);
       }
 
-      if (variant.product.warehouseId !== sourceWarehouseId) {
-        throw new Error(
-          `Produk "${variant.product.name}" tidak berada di gudang asal yang dipilih`
-        );
-      }
+      const sourceStockRecord = variant.warehouseStocks[0];
+      const sourceStock = sourceStockRecord ? sourceStockRecord.stock : 0;
 
-      if (variant.stock < item.quantity) {
-        throw new Error(
-          `Stok varian "${variant.variantName}" di gudang asal tidak mencukupi (Tersedia: ${variant.stock}, Diminta: ${item.quantity})`
-        );
+      if (sourceStock < item.quantity) {
+        throw new Error(`Stok varian "${variant.variantName}" di gudang asal tidak mencukupi (Tersedia: ${sourceStock}, Diminta: ${item.quantity})`);
       }
     }
 
@@ -260,119 +252,31 @@ export class TransferService {
       for (const item of transfer.items) {
         const sourceVariant = await tx.productVariant.findUnique({
           where: { id: item.variantId },
-          include: { product: true },
+          include: { warehouseStocks: { where: { warehouseId: transfer.sourceWarehouseId } } },
         });
 
         if (!sourceVariant) {
-          throw new Error(
-            `Varian produk tidak ditemukan untuk item transfer ID: ${item.id}`
-          );
+          throw new Error(`Varian produk tidak ditemukan untuk item transfer ID: ${item.id}`);
         }
 
-        // Check if sufficient stock
-        if (sourceVariant.stock < item.quantity) {
-          throw new Error(
-            `INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian "${sourceVariant.variantName}" pada produk "${sourceVariant.product.name}" di gudang asal (Tersedia: ${sourceVariant.stock}, Dibutuhkan: ${item.quantity})`
-          );
+        const sourceStockRecord = sourceVariant.warehouseStocks[0];
+        const sourceStock = sourceStockRecord ? sourceStockRecord.stock : 0;
+
+        if (sourceStock < item.quantity) {
+          throw new Error(`INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian asal (Tersedia: ${sourceStock}, Dibutuhkan: ${item.quantity})`);
         }
 
-        // Decrement stock at source warehouse variant
-        await tx.productVariant.update({
-          where: { id: sourceVariant.id },
-          data: {
-            stock: { decrement: item.quantity },
-          },
+        // Decrement stock at source warehouse variant stock
+        await tx.productVariantStock.update({
+          where: { id: sourceStockRecord.id },
+          data: { stock: { decrement: item.quantity } },
         });
 
-        // Decrement totalStock at source product
-        await tx.product.update({
-          where: { id: sourceVariant.productId },
-          data: {
-            totalStock: { decrement: item.quantity },
-          },
-        });
-
-        // 3. Add stock to destination warehouse (preserving same SKU and keeping source product in source warehouse)
-        let destProduct = await tx.product.findFirst({
-          where: {
-            warehouseId: transfer.destinationWarehouseId,
-            name: sourceVariant.product.name,
-          },
-        });
-
-        if (!destProduct) {
-          destProduct = await tx.product.create({
-            data: {
-              name: sourceVariant.product.name,
-              categoryId: sourceVariant.product.categoryId,
-              warehouseId: transfer.destinationWarehouseId,
-              totalStock: 0,
-              avgCostPrice: sourceVariant.priceCost,
-              createdById: userId,
-            },
-          });
-        }
-
-        let destVariant = await tx.productVariant.findFirst({
-          where: {
-            productId: destProduct.id,
-            variantName: sourceVariant.variantName,
-          },
-        });
-
-        if (destVariant) {
-          const prevTotalCost = destVariant.stock * destVariant.priceCost;
-          const addedTotalCost = item.quantity * sourceVariant.priceCost;
-          const newTotalStock = destVariant.stock + item.quantity;
-          const newAvgCostPrice =
-            newTotalStock > 0
-              ? Math.round(((prevTotalCost + addedTotalCost) / newTotalStock) * 100) / 100
-              : destVariant.priceCost;
-
-          await tx.productVariant.update({
-            where: { id: destVariant.id },
-            data: {
-              stock: { increment: item.quantity },
-              priceCost: newAvgCostPrice,
-              updatedById: userId,
-            },
-          });
-        } else {
-          // Use original SKU without adding new/modified SKU suffix
-          destVariant = await tx.productVariant.create({
-            data: {
-              productId: destProduct.id,
-              variantName: sourceVariant.variantName,
-              sku: sourceVariant.sku,
-              stock: item.quantity,
-              priceSell: sourceVariant.priceSell,
-              priceCost: sourceVariant.priceCost,
-              createdById: userId,
-            },
-          });
-        }
-
-        const allDestVariants = await tx.productVariant.findMany({
-          where: { productId: destProduct.id },
-        });
-
-        const destTotalStock = allDestVariants.reduce((sum, v) => sum + v.stock, 0);
-        const destTotalCost = allDestVariants.reduce(
-          (sum, v) => sum + v.stock * v.priceCost,
-          0
-        );
-        const destAvgCost =
-          destTotalStock > 0
-            ? Math.round((destTotalCost / destTotalStock) * 100) / 100
-            : destProduct.avgCostPrice;
-
-        await tx.product.update({
-          where: { id: destProduct.id },
-          data: {
-            totalStock: destTotalStock,
-            avgCostPrice: destAvgCost,
-            updatedById: userId,
-          },
+        // Add stock to destination warehouse variant stock
+        await tx.productVariantStock.upsert({
+          where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId } },
+          update: { stock: { increment: item.quantity } },
+          create: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId, stock: item.quantity }
         });
       }
 
@@ -492,23 +396,18 @@ export class TransferService {
 
           const variant = await tx.productVariant.findUnique({
             where: { id: item.variantId },
-            include: { product: true },
+            include: { product: true, warehouseStocks: { where: { warehouseId: sourceWarehouseId } } },
           });
 
           if (!variant) {
             throw new Error(`Varian dengan ID ${item.variantId} tidak ditemukan`);
           }
 
-          if (variant.product.warehouseId !== sourceWarehouseId) {
-            throw new Error(
-              `Produk "${variant.product.name}" tidak berada di gudang asal`
-            );
-          }
+          const sourceStockRecord = variant.warehouseStocks[0];
+          const sourceStock = sourceStockRecord ? sourceStockRecord.stock : 0;
 
-          if (variant.stock < item.quantity) {
-            throw new Error(
-              `Stok varian "${variant.variantName}" di gudang asal tidak mencukupi (Tersedia: ${variant.stock}, Diminta: ${item.quantity})`
-            );
+          if (sourceStock < item.quantity) {
+            throw new Error(`Stok varian "${variant.variantName}" di gudang asal tidak mencukupi (Tersedia: ${sourceStock}, Diminta: ${item.quantity})`);
           }
         }
 

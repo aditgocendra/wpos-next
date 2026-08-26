@@ -90,13 +90,13 @@ export function InventoryFormDialog({
     if (product) {
       setName(product.name);
       setCategoryId(product.categoryId);
-      setWarehouseId(product.warehouseId);
+      setWarehouseId(""); // Warehouse is not editable directly in edit mode
       setVariants(
         product.variants.map((v) => ({
           id: v.id,
           variantName: v.variantName,
           sku: v.sku,
-          stock: v.stock,
+          stock: v.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0,
           priceCost: v.priceCost,
           priceSell: v.priceSell,
         }))
