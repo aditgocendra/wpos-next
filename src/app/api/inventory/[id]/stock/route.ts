@@ -22,26 +22,11 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const body = await req.json();
-    const { variantId, stock, priceCost } = body;
+    const { variantId, warehouseId, stock, priceCost } = await req.json();
 
-    if (!variantId) {
+    if (!variantId || !warehouseId || stock === undefined || priceCost === undefined) {
       return NextResponse.json(
-        { error: "Varian produk wajib dipilih" },
-        { status: 400 }
-      );
-    }
-
-    if (stock === undefined || Number(stock) <= 0) {
-      return NextResponse.json(
-        { error: "Jumlah stok tambahan harus lebih dari 0" },
-        { status: 400 }
-      );
-    }
-
-    if (priceCost === undefined || Number(priceCost) < 0) {
-      return NextResponse.json(
-        { error: "Harga modal wajib diisi dan tidak boleh bernilai negatif" },
+        { error: "Varian, Gudang, stok, dan harga modal wajib diisi" },
         { status: 400 }
       );
     }
@@ -50,6 +35,7 @@ export async function POST(req: Request, context: RouteContext) {
       id,
       {
         variantId,
+        warehouseId,
         stock: Number(stock),
         priceCost: Number(priceCost),
       },

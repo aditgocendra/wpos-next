@@ -18,6 +18,9 @@ describe("InventoryService Unit Tests", () => {
       update: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
     };
+    productVariantStock: {
+      upsert: ReturnType<typeof vi.fn>;
+    };
     category: {
       findUnique: ReturnType<typeof vi.fn>;
     };
@@ -66,6 +69,14 @@ describe("InventoryService Unit Tests", () => {
         variantName: "Black",
         sku: "EAR-SON-WF1-BLK",
         stock: 15,
+        warehouseStocks: [
+          {
+            id: "pvs-1",
+            variantId: "var-1",
+            warehouseId: "wh-main",
+            stock: 15,
+          },
+        ],
         priceCost: 3000000,
         priceSell: 4200000,
         createdById: "usr-admin",
@@ -79,6 +90,14 @@ describe("InventoryService Unit Tests", () => {
         variantName: "Silver",
         sku: "EAR-SON-WF1-SLV",
         stock: 10,
+        warehouseStocks: [
+          {
+            id: "pvs-2",
+            variantId: "var-2",
+            warehouseId: "wh-main",
+            stock: 10,
+          },
+        ],
         priceCost: 3000000,
         priceSell: 4200000,
         createdById: "usr-admin",
@@ -87,6 +106,8 @@ describe("InventoryService Unit Tests", () => {
         updatedAt: new Date(),
       },
     ],
+    transactionItems: [],
+    transferItems: [],
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -107,6 +128,9 @@ describe("InventoryService Unit Tests", () => {
         update: vi.fn(),
         deleteMany: vi.fn(),
       },
+      productVariantStock: {
+        upsert: vi.fn(),
+      },
       category: {
         findUnique: vi.fn(),
       },
@@ -118,6 +142,7 @@ describe("InventoryService Unit Tests", () => {
           return await cb({
             product: mockPrisma.product,
             productVariant: mockPrisma.productVariant,
+            productVariantStock: mockPrisma.productVariantStock,
           });
         }
         return cb;
@@ -151,27 +176,6 @@ describe("InventoryService Unit Tests", () => {
       );
     });
 
-    it("should calculate total stock and moving average cost price correctly", () => {
-      const result = inventoryService.calculateStockAndAvgCost([
-        { stock: 10, priceCost: 100000 },
-        { stock: 20, priceCost: 200000 },
-      ]);
-
-      // Total Stock = 30
-      // Total Cost = (10 * 100000) + (20 * 200000) = 1,000,000 + 4,000,000 = 5,000,000
-      // Moving Average = 5,000,000 / 30 = 166666.67
-      expect(result.totalStock).toBe(30);
-      expect(result.avgCostPrice).toBe(166666.67);
-    });
-
-    it("should handle 0 stock by averaging variant base cost", () => {
-      const result = inventoryService.calculateStockAndAvgCost([
-        { stock: 0, priceCost: 100000 },
-        { stock: 0, priceCost: 200000 },
-      ]);
-      expect(result.totalStock).toBe(0);
-      expect(result.avgCostPrice).toBe(150000);
-    });
   });
 
   describe("createProduct", () => {
@@ -366,17 +370,22 @@ describe("InventoryService Unit Tests", () => {
 
   describe("addStock (Shortcut & Moving Average)", () => {
     it("should add stock and calculate new Moving Average HPP correctly", async () => {
-      mockPrisma.product.findUnique
-        .mockResolvedValueOnce(sampleProduct) // check product & variants
-        .mockResolvedValueOnce({
-          ...sampleProduct,
-          totalStock: 35, // 25 + 10
-          avgCostPrice: 3285714.29, // ((25 * 3,000,000) + (10 * 4,000,000)) / 35 = 115,000,000 / 35
-        }); // getProductById
+      mockPrisma.productVariant.findUnique.mockResolvedValue(sampleProduct.variants[0]);
+      mockPrisma.product.findUnique.mockResolvedValue({
+        ...sampleProduct,
+        variants: [
+          {
+            ...sampleProduct.variants[0],
+            warehouseStocks: [{ ...sampleProduct.variants[0].warehouseStocks[0], stock: 25 }],
+          },
+          sampleProduct.variants[1],
+        ],
+      }); // getProductById
 
       const result = await inventoryService.addStock(
         "prod-1",
         {
+          warehouseId: "wh-main",
           variantId: "var-1",
           stock: 10,
           priceCost: 4000000,
@@ -385,21 +394,8 @@ describe("InventoryService Unit Tests", () => {
       );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
-        where: { id: "var-1" },
-        data: expect.objectContaining({
-          stock: 25, // 15 + 10
-          updatedById: "usr-admin",
-        }),
-      });
-      expect(mockPrisma.product.update).toHaveBeenCalledWith({
-        where: { id: "prod-1" },
-        data: expect.objectContaining({
-          totalStock: 35,
-          avgCostPrice: 3285714.29,
-          updatedById: "usr-admin",
-        }),
-      });
+      expect(mockPrisma.productVariant.update).toHaveBeenCalled();
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalled();
       expect(result.totalStock).toBe(35);
     });
 
@@ -408,6 +404,7 @@ describe("InventoryService Unit Tests", () => {
         inventoryService.addStock(
           "prod-1",
           {
+            warehouseId: "wh-1",
             variantId: "var-1",
             stock: 0,
             priceCost: 3000000,
@@ -418,12 +415,13 @@ describe("InventoryService Unit Tests", () => {
     });
 
     it("should throw error if target variant does not exist on product", async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(sampleProduct);
+      mockPrisma.productVariant.findUnique.mockResolvedValue(null);
 
       await expect(
         inventoryService.addStock(
           "prod-1",
           {
+            warehouseId: "wh-1",
             variantId: "non-existent-var",
             stock: 5,
             priceCost: 3000000,

@@ -52,17 +52,18 @@ model User {
 }
 
 model Warehouse {
-  id                   String          @id @default(cuid())
+  id                   String                @id @default(cuid())
   name                 String
-  code                 String?         @unique
+  code                 String?               @unique
   address              String?
   admin                User?
   products             Product[]
-  sourceTransfers      StockTransfer[] @relation("SourceTransfers")
-  destinationTransfers StockTransfer[] @relation("DestinationTransfers")
+  sourceTransfers      StockTransfer[]       @relation("SourceTransfers")
+  destinationTransfers StockTransfer[]       @relation("DestinationTransfers")
   transactions         Transaction[]
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  productVariantStocks ProductVariantStock[]
 
   @@map("warehouses")
 }
@@ -85,49 +86,46 @@ model Product {
   id               String              @id @default(cuid())
   name             String
   categoryId       String
-  warehouseId      String
-  totalStock       Int                 @default(0)
-  avgCostPrice     Float               @default(0.0) // Moving average cost price (HPP)
-  
-  category         Category            @relation(fields: [categoryId], references: [id])
-  warehouse        Warehouse           @relation(fields: [warehouseId], references: [id])
   variants         ProductVariant[]
   transferItems    StockTransferItem[]
   transactionItems TransactionItem[]
-  
-  createdById      String
-  updatedById      String?
-  createdBy        User                @relation("ProductCreatedBy", fields: [createdById], references: [id])
-  updatedBy        User?               @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
 
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  category Category @relation(fields: [categoryId], references: [id])
+
+  createdById String
+  updatedById String?
+  createdBy   User    @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?   @relation("ProductUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+  warehouseId String?
 
   @@index([categoryId])
-  @@index([warehouseId])
   @@map("products")
 }
 
 model ProductVariant {
-  id               String              @id @default(cuid())
-  productId        String
-  variantName      String   // contoh: "Hitam", "Putih", "64GB", dll
-  sku              String   // Format: CODE1-CODE2-CODE3-CODE4
-  stock            Int      @default(0)
-  priceSell        Float    @default(0.0)
-  priceCost        Float    @default(0.0)
+  id          String @id @default(cuid())
+  productId   String
+  variantName String // contoh: "Hitam", "Putih", "64GB", dll
+  sku         String // Format: CODE1-CODE2-CODE3-CODE4
+  priceSell   Float  @default(0.0)
+  priceCost   Float  @default(0.0)
 
-  product          Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
   transferItems    StockTransferItem[]
   transactionItems TransactionItem[]
-  
-  createdById      String
-  updatedById      String?
-  createdBy        User                @relation("VariantCreatedBy", fields: [createdById], references: [id])
-  updatedBy        User?               @relation("VariantUpdatedBy", fields: [updatedById], references: [id])
+  warehouseStocks  ProductVariantStock[]
 
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  createdById String
+  updatedById String?
+  createdBy   User    @relation("VariantCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?   @relation("VariantUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, sku])
   @@index([productId])
@@ -135,23 +133,38 @@ model ProductVariant {
   @@map("product_variants")
 }
 
+model ProductVariantStock {
+  id          String @id @default(cuid())
+  variantId   String
+  warehouseId String
+  stock       Int    @default(0)
+
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, warehouseId])
+  @@index([variantId])
+  @@index([warehouseId])
+  @@map("product_variant_stocks")
+}
+
 model StockTransfer {
-  id                     String              @id @default(cuid())
-  transferNumber         String              @unique
+  id                     String         @id @default(cuid())
+  transferNumber         String         @unique
   sourceWarehouseId      String
   destinationWarehouseId String
-  status                 TransferStatus      @default(PENDING)
+  status                 TransferStatus @default(PENDING)
   notes                  String?
   createdById            String
   updatedById            String?
-  createdAt              DateTime            @default(now())
-  updatedAt              DateTime            @updatedAt
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
 
-  sourceWarehouse        Warehouse           @relation("SourceTransfers", fields: [sourceWarehouseId], references: [id])
-  destinationWarehouse   Warehouse           @relation("DestinationTransfers", fields: [destinationWarehouseId], references: [id])
-  createdBy              User                @relation("TransfersCreated", fields: [createdById], references: [id])
-  updatedBy              User?               @relation("TransfersUpdated", fields: [updatedById], references: [id])
-  items                  StockTransferItem[]
+  sourceWarehouse      Warehouse           @relation("SourceTransfers", fields: [sourceWarehouseId], references: [id])
+  destinationWarehouse Warehouse           @relation("DestinationTransfers", fields: [destinationWarehouseId], references: [id])
+  createdBy            User                @relation("TransfersCreated", fields: [createdById], references: [id])
+  updatedBy            User?               @relation("TransfersUpdated", fields: [updatedById], references: [id])
+  items                StockTransferItem[]
 
   @@index([sourceWarehouseId])
   @@index([destinationWarehouseId])
@@ -159,17 +172,17 @@ model StockTransfer {
 }
 
 model StockTransferItem {
-  id          String         @id @default(cuid())
-  transferId  String
-  productId   String
-  variantId   String
-  quantity    Int
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id         String   @id @default(cuid())
+  transferId String
+  productId  String
+  variantId  String
+  quantity   Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  transfer    StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product     Product        @relation(fields: [productId], references: [id])
-  variant     ProductVariant @relation(fields: [variantId], references: [id])
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product        @relation(fields: [productId], references: [id])
+  variant  ProductVariant @relation(fields: [variantId], references: [id])
 
   @@index([transferId])
   @@index([productId])
@@ -198,21 +211,21 @@ model Transaction {
 }
 
 model TransactionItem {
-  id            String         @id @default(cuid())
+  id            String @id @default(cuid())
   transactionId String
   productId     String
   variantId     String
   quantity      Int
-  price         Float          @default(0.0) // Selling price snapshot
-  totalPrice    Float          @default(0.0) // price * quantity
-  costPrice     Float          @default(0.0) // Cost price snapshot (HPP)
-  
-  transaction   Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  product       Product        @relation(fields: [productId], references: [id])
-  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  price         Float  @default(0.0) // Selling price snapshot
+  totalPrice    Float  @default(0.0) // price * quantity
+  costPrice     Float  @default(0.0) // Cost price snapshot (HPP)
 
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  transaction Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  product     Product        @relation(fields: [productId], references: [id])
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([transactionId])
   @@index([productId])

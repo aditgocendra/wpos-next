@@ -33,6 +33,14 @@ describe("TransactionService Unit Tests", () => {
     variantName: "Size L Red",
     sku: "CLO-FLA-L-RED",
     stock: 20,
+    warehouseStocks: [
+      {
+        id: "pvs-1",
+        variantId: "var-1",
+        warehouseId: "wh-1",
+        stock: 20,
+      },
+    ],
     priceSell: 150000,
     priceCost: 100000,
     product: sampleProduct,
@@ -85,6 +93,10 @@ describe("TransactionService Unit Tests", () => {
       productVariant: {
         findUnique: vi.fn(),
         update: vi.fn(),
+      },
+      productVariantStock: {
+        update: vi.fn(),
+        upsert: vi.fn(),
       },
       transaction: {
         findUnique: vi.fn(),
@@ -179,13 +191,9 @@ describe("TransactionService Unit Tests", () => {
       );
 
       expect(result.id).toBe("trx-123");
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
-        where: { id: "var-1" },
+      expect(mockPrisma.productVariantStock.update).toHaveBeenCalledWith({
+        where: { id: "pvs-1" },
         data: { stock: { decrement: 2 } },
-      });
-      expect(mockPrisma.product.update).toHaveBeenCalledWith({
-        where: { id: "prod-1" },
-        data: { totalStock: { decrement: 2 } },
       });
       expect(mockPrisma.transaction.create).toHaveBeenCalled();
     });
@@ -208,7 +216,14 @@ describe("TransactionService Unit Tests", () => {
       mockPrisma.warehouse.findUnique.mockResolvedValue(sampleWarehouse);
       mockPrisma.productVariant.findUnique.mockResolvedValue({
         ...sampleVariant,
-        stock: 1, // Only 1 available, but requested 5
+        warehouseStocks: [
+          {
+            id: "pvs-1",
+            variantId: "var-1",
+            warehouseId: "wh-1",
+            stock: 1, // Only 1 available, but requested 5
+          },
+        ],
       });
 
       await expect(
@@ -222,14 +237,11 @@ describe("TransactionService Unit Tests", () => {
       ).rejects.toThrow("INSUFFICIENT_STOCK");
     });
 
-    it("should throw error if product is from different warehouse", async () => {
+    it("should throw error if product variant does not match productId", async () => {
       mockPrisma.warehouse.findUnique.mockResolvedValue(sampleWarehouse);
       mockPrisma.productVariant.findUnique.mockResolvedValue({
         ...sampleVariant,
-        product: {
-          ...sampleProduct,
-          warehouseId: "other-wh",
-        },
+        productId: "other-prod",
       });
 
       await expect(
@@ -240,7 +252,7 @@ describe("TransactionService Unit Tests", () => {
           },
           "usr-cashier"
         )
-      ).rejects.toThrow("tidak berada pada gudang yang dipilih");
+      ).rejects.toThrow("tidak cocok");
     });
   });
 
@@ -249,7 +261,14 @@ describe("TransactionService Unit Tests", () => {
       mockPrisma.transaction.findUnique.mockResolvedValue(sampleTransaction);
       mockPrisma.productVariant.findUnique.mockResolvedValue({
         ...sampleVariant,
-        stock: 30,
+        warehouseStocks: [
+          {
+            id: "pvs-1",
+            variantId: "var-1",
+            warehouseId: "wh-1",
+            stock: 30,
+          },
+        ],
       });
       mockPrisma.transaction.update.mockResolvedValue({
         ...sampleTransaction,
@@ -272,16 +291,8 @@ describe("TransactionService Unit Tests", () => {
         "usr-admin"
       );
 
-      // Rollback previous quantity (2)
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
-        where: { id: "var-1" },
-        data: { stock: { increment: 2 } },
-      });
-      // Deduct new quantity (3)
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
-        where: { id: "var-1" },
-        data: { stock: { decrement: 3 } },
-      });
+      // Rollback previous quantity (2) and Deduct new quantity (3) via upsert
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalled();
       expect(result.totalAmount).toBe(450000);
     });
   });
@@ -293,13 +304,10 @@ describe("TransactionService Unit Tests", () => {
       const result = await transactionService.deleteTransaction("trx-123");
 
       expect(result).toEqual({ success: true });
-      expect(mockPrisma.productVariant.update).toHaveBeenCalledWith({
-        where: { id: "var-1" },
-        data: { stock: { increment: 2 } },
-      });
-      expect(mockPrisma.product.update).toHaveBeenCalledWith({
-        where: { id: "prod-1" },
-        data: { totalStock: { increment: 2 } },
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith({
+        where: { variantId_warehouseId: { variantId: "var-1", warehouseId: "wh-1" } },
+        update: { stock: { increment: 2 } },
+        create: { variantId: "var-1", warehouseId: "wh-1", stock: 2 },
       });
       expect(mockPrisma.transaction.delete).toHaveBeenCalledWith({
         where: { id: "trx-123" },

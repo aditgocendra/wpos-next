@@ -89,8 +89,7 @@ export function InventoryDeleteDialog({
               </Badge>
             </div>
             <div className="text-xs flex items-center justify-between text-muted-foreground">
-              <span>Gudang: {product.warehouse.name}</span>
-              <span>Total Stok: {product.totalStock} unit</span>
+              <span>Total Stok (Semua Gudang): {product.totalStock} unit</span>
             </div>
             <div className="text-xs text-muted-foreground">
               Jumlah SKU Varian: <strong className="text-foreground">{product.variants.length} varian</strong>

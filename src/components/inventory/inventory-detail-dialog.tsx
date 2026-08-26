@@ -81,7 +81,7 @@ export function InventoryDetailDialog({
                 </Badge>
               </div>
               <DialogDescription className="truncate">
-                {product.category.name} &bull; {product.warehouse.name}
+                {product.category.name}
               </DialogDescription>
             </div>
           </div>
@@ -144,9 +144,9 @@ export function InventoryDetailDialog({
                 </div>
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Gudang Penyimpanan</p>
-                  <p className="text-sm font-semibold">{product.warehouse.name}</p>
+                  <p className="text-sm font-semibold">Multi-Gudang</p>
                   <p className="text-[11px] font-mono text-muted-foreground">
-                    Kode: [{product.warehouse.code || "-"}]
+                    Lihat detail stok tiap gudang di menu Stok
                   </p>
                 </div>
               </div>
@@ -178,7 +178,7 @@ export function InventoryDetailDialog({
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Stok Tersedia: <strong className="text-foreground">{variant.stock} unit</strong>
+                        Stok Tersedia (Total): <strong className="text-foreground">{variant.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0} unit</strong>
                       </p>
                     </div>
 

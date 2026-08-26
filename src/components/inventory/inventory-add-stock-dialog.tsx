@@ -34,6 +34,7 @@ interface InventoryAddStockDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   product: ProductItem | null;
+  warehouses: { id: string; name: string }[];
   onSuccess: () => void;
 }
 
@@ -41,36 +42,39 @@ export function InventoryAddStockDialog({
   open,
   onOpenChange,
   product,
+  warehouses,
   onSuccess,
 }: InventoryAddStockDialogProps) {
+  const [warehouseId, setWarehouseId] = React.useState("");
   const [variantId, setVariantId] = React.useState("");
   const [stock, setStock] = React.useState<number | string>(1);
   const [priceCost, setPriceCost] = React.useState<number | string>(0);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Initialize or reset form state when product changes
   React.useEffect(() => {
     if (product && product.variants.length > 0) {
       const firstVariant = product.variants[0];
       setVariantId(firstVariant.id);
       setStock(1);
       setPriceCost(firstVariant.priceCost);
+      if (warehouses && warehouses.length > 0) {
+        setWarehouseId(warehouses[0].id);
+      }
     } else {
       setVariantId("");
+      setWarehouseId("");
       setStock(1);
       setPriceCost(0);
     }
     setError(null);
-  }, [product, open]);
+  }, [product, open, warehouses]);
 
-  // Selected variant
   const selectedVariant = React.useMemo(() => {
     if (!product) return null;
     return product.variants.find((v) => v.id === variantId) || null;
   }, [product, variantId]);
 
-  // When variant selection changes, default priceCost to that variant's current cost
   const handleVariantChange = (newVariantId: string) => {
     setVariantId(newVariantId);
     if (product) {
@@ -81,9 +85,16 @@ export function InventoryAddStockDialog({
     }
   };
 
-  // Live calculation of Moving Average according to PRD 4.4
+  const getVariantStockInWarehouse = (vId: string, wId: string) => {
+    if (!product) return 0;
+    const v = product.variants.find((item) => item.id === vId);
+    if (!v || !v.warehouseStocks) return 0;
+    const record = v.warehouseStocks.find((ws) => ws.warehouseId === wId);
+    return record ? record.stock : 0;
+  };
+
   const calculationPreview = React.useMemo(() => {
-    if (!product || !selectedVariant) return null;
+    if (!product || !selectedVariant || !warehouseId) return null;
 
     const oldProductStock = product.totalStock;
     const oldProductAvgCost = product.avgCostPrice;
@@ -100,21 +111,28 @@ export function InventoryAddStockDialog({
           ) / 100
         : newPriceCost;
 
-    const newVariantStock = selectedVariant.stock + addedQty;
+    const currentVariantWarehouseStock = getVariantStockInWarehouse(selectedVariant.id, warehouseId);
+    const newVariantStock = currentVariantWarehouseStock + addedQty;
 
     return {
       addedQty,
       newPriceCost,
       newProductTotalStock,
       newProductAvgCost,
+      currentVariantWarehouseStock,
       newVariantStock,
     };
-  }, [product, selectedVariant, stock, priceCost]);
+  }, [product, selectedVariant, warehouseId, stock, priceCost]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product) return;
     setError(null);
+
+    if (!warehouseId) {
+      setError("Gudang wajib dipilih");
+      return;
+    }
 
     if (!variantId) {
       setError("Varian produk wajib dipilih");
@@ -139,6 +157,7 @@ export function InventoryAddStockDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          warehouseId,
           variantId,
           stock: addedQty,
           priceCost: inputCost,
@@ -183,7 +202,7 @@ export function InventoryAddStockDialog({
                   </DialogTitle>
                 </div>
                 <DialogDescription className="truncate">
-                  {product.name} &bull; Gudang: {product.warehouse.name}
+                  {product.name}
                 </DialogDescription>
               </div>
             </div>
@@ -197,7 +216,30 @@ export function InventoryAddStockDialog({
               </div>
             )}
 
-            {/* Variant Selector */}
+            <div className="space-y-1.5">
+              <Label htmlFor="stock-warehouse" className="text-xs font-semibold">
+                Gudang <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                value={warehouseId}
+                onValueChange={(val) => {
+                  if (val) setWarehouseId(val);
+                }}
+                disabled={loading}
+              >
+                <SelectTrigger id="stock-warehouse" className="w-full">
+                  <SelectValue placeholder="Pilih Gudang" />
+                </SelectTrigger>
+                <SelectContent>
+                  {warehouses.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="stock-variant" className="text-xs font-semibold">
                 Variant Produk <span className="text-destructive">*</span>
@@ -221,7 +263,7 @@ export function InventoryAddStockDialog({
                           [{v.sku}]
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          (Stok saat ini: {v.stock})
+                          (Stok Total: {v.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0})
                         </span>
                       </div>
                     </SelectItem>
@@ -231,7 +273,6 @@ export function InventoryAddStockDialog({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* Stock Input */}
               <div className="space-y-1.5">
                 <Label htmlFor="stock-qty" className="text-xs font-semibold">
                   Jumlah Stok Baru (Unit) <span className="text-destructive">*</span>
@@ -248,7 +289,6 @@ export function InventoryAddStockDialog({
                 />
               </div>
 
-              {/* Price Cost Input (Default: old priceCost) */}
               <div className="space-y-1.5">
                 <Label htmlFor="stock-cost" className="text-xs font-semibold">
                   Harga Modal Baru (Rp) <span className="text-destructive">*</span>
@@ -266,7 +306,6 @@ export function InventoryAddStockDialog({
               </div>
             </div>
 
-            {/* Current Variant & HPP Preview Box */}
             {selectedVariant && calculationPreview && (
               <div className="rounded-xl border bg-muted/30 p-3.5 space-y-2 text-xs">
                 <div className="flex items-center justify-between border-b pb-2">
@@ -281,9 +320,9 @@ export function InventoryAddStockDialog({
 
                 <div className="grid grid-cols-2 gap-2 pt-0.5">
                   <div>
-                    <span className="text-muted-foreground">Stok Varian Saat Ini:</span>
+                    <span className="text-muted-foreground">Stok Varian Saat Ini di Gudang Terpilih:</span>
                     <p className="font-semibold text-foreground">
-                      {selectedVariant.stock} unit &rarr;{" "}
+                      {calculationPreview.currentVariantWarehouseStock} unit &rarr;{" "}
                       <strong className="text-green-600 dark:text-green-400">
                         {calculationPreview.newVariantStock} unit
                       </strong>
@@ -291,7 +330,7 @@ export function InventoryAddStockDialog({
                   </div>
 
                   <div>
-                    <span className="text-muted-foreground">Total Stok Produk:</span>
+                    <span className="text-muted-foreground">Total Stok Semua Varian:</span>
                     <p className="font-semibold text-foreground">
                       {product.totalStock} unit &rarr;{" "}
                       <strong className="text-green-600 dark:text-green-400">
@@ -301,25 +340,20 @@ export function InventoryAddStockDialog({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-2 border-t text-foreground">
+                <div className="border-t pt-2 mt-1 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <TrendingUpIcon className="size-3.5 text-blue-600 dark:text-blue-400" />
-                    <span className="font-medium">HPP Baru (Moving Average):</span>
+                    <TrendingUpIcon className="size-3.5 text-blue-500" />
+                    <span className="text-muted-foreground font-medium">HPP Baru (Moving Avg):</span>
                   </div>
-                  <div className="text-right">
-                    <span className="font-bold text-blue-600 dark:text-blue-400 text-sm">
-                      {formatRupiah(calculationPreview.newProductAvgCost)}
-                    </span>
-                    <p className="text-[10px] text-muted-foreground">
-                      Sebelumnya: {formatRupiah(product.avgCostPrice)}
-                    </p>
-                  </div>
+                  <span className="font-bold text-sm text-foreground">
+                    {formatRupiah(calculationPreview.newProductAvgCost)}
+                  </span>
                 </div>
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
@@ -328,13 +362,13 @@ export function InventoryAddStockDialog({
             >
               Batal
             </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-            >
-              {loading && <RefreshCwIcon className="size-4 animate-spin" />}
-              <span>Tambah Stok</span>
+            <Button type="submit" disabled={loading} className="gap-2">
+              {loading ? (
+                <RefreshCwIcon className="size-4 animate-spin" />
+              ) : (
+                <PackagePlusIcon className="size-4" />
+              )}
+              {loading ? "Menyimpan..." : "Simpan Stok Baru"}
             </Button>
           </DialogFooter>
         </form>

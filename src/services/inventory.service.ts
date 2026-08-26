@@ -1,13 +1,25 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
 
+export interface ProductVariantStockItem {
+  id: string;
+  variantId: string;
+  warehouseId: string;
+  warehouse: {
+    id: string;
+    name: string;
+    code: string | null;
+  };
+  stock: number;
+}
+
 export interface ProductVariantItem {
   id: string;
   productId: string;
   variantName: string;
   sku: string;
-  stock: number;
   priceSell: number;
   priceCost: number;
+  warehouseStocks?: ProductVariantStockItem[];
   createdById: string;
   updatedById: string | null;
   createdAt: Date;
@@ -22,12 +34,6 @@ export interface ProductItem {
     id: string;
     name: string;
     code: string;
-  };
-  warehouseId: string;
-  warehouse: {
-    id: string;
-    name: string;
-    code: string | null;
   };
   totalStock: number;
   avgCostPrice: number;
@@ -67,7 +73,7 @@ export interface UpdateVariantInput {
   id?: string; // If provided, update existing; if not, create new
   variantName: string;
   sku: string;
-  stock: number;
+  stock?: number;
   priceSell: number;
   priceCost: number;
 }
@@ -80,6 +86,7 @@ export interface UpdateProductInput {
 }
 
 export interface AddStockInput {
+  warehouseId: string;
   variantId: string;
   stock: number;
   priceCost: number;
@@ -94,10 +101,6 @@ export interface GetProductsParams {
 export class InventoryService {
   constructor(private db = defaultPrisma) {}
 
-  /**
-   * Validate SKU format: CODE1-CODE2-CODE3-CODE4
-   * e.g., EAR-SON-WF1-BLK
-   */
   public validateSku(sku: string): string {
     const formatted = sku.trim().toUpperCase();
     if (!formatted) {
@@ -111,7 +114,6 @@ export class InventoryService {
       );
     }
 
-    // Check each segment contains only letters/numbers
     for (const seg of segments) {
       if (!seg || !/^[A-Z0-9]+$/.test(seg)) {
         throw new Error(
@@ -123,48 +125,17 @@ export class InventoryService {
     return formatted;
   }
 
-  /**
-   * Calculate moving average HPP and total stock from variants
-   */
-  public calculateStockAndAvgCost(
-    variants: { stock: number; priceCost: number }[]
-  ): { totalStock: number; avgCostPrice: number } {
-    if (!variants || variants.length === 0) {
-      return { totalStock: 0, avgCostPrice: 0 };
-    }
-
-    const totalStock = variants.reduce((sum, v) => sum + Math.max(0, Number(v.stock) || 0), 0);
-
-    if (totalStock > 0) {
-      const totalCost = variants.reduce(
-        (sum, v) => sum + Math.max(0, Number(v.stock) || 0) * (Number(v.priceCost) || 0),
-        0
-      );
-      const avgCostPrice = Math.round((totalCost / totalStock) * 100) / 100;
-      return { totalStock, avgCostPrice };
-    }
-
-    // If total stock is 0, average the variant base cost
-    const avgCostPrice =
-      Math.round(
-        (variants.reduce((sum, v) => sum + (Number(v.priceCost) || 0), 0) / variants.length) * 100
-      ) / 100;
-
-    return { totalStock: 0, avgCostPrice };
-  }
-
   async getProducts(params: GetProductsParams = {}): Promise<ProductItem[]> {
-    const whereClause: {
-      warehouseId?: string;
-      categoryId?: string;
-      OR?: {
-        name?: { contains: string; mode: "insensitive" };
-        variants?: { some: { sku: { contains: string; mode: "insensitive" } } };
-      }[];
-    } = {};
+    const whereClause: any = {};
 
     if (params.warehouseId) {
-      whereClause.warehouseId = params.warehouseId;
+      whereClause.variants = {
+        some: {
+          warehouseStocks: {
+            some: { warehouseId: params.warehouseId },
+          },
+        },
+      };
     }
 
     if (params.categoryId) {
@@ -186,11 +157,15 @@ export class InventoryService {
         category: {
           select: { id: true, name: true, code: true },
         },
-        warehouse: {
-          select: { id: true, name: true, code: true },
-        },
         variants: {
           orderBy: { createdAt: "asc" },
+          include: {
+            warehouseStocks: {
+              include: {
+                warehouse: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
         },
         createdBy: {
           select: { id: true, name: true, email: true },
@@ -201,35 +176,53 @@ export class InventoryService {
       },
     });
 
-    return products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      categoryId: p.categoryId,
-      category: p.category,
-      warehouseId: p.warehouseId,
-      warehouse: p.warehouse,
-      totalStock: p.totalStock,
-      avgCostPrice: p.avgCostPrice,
-      variants: p.variants.map((v) => ({
-        id: v.id,
-        productId: v.productId,
-        variantName: v.variantName,
-        sku: v.sku,
-        stock: v.stock,
-        priceSell: v.priceSell,
-        priceCost: v.priceCost,
-        createdById: v.createdById,
-        updatedById: v.updatedById,
-        createdAt: v.createdAt,
-        updatedAt: v.updatedAt,
-      })),
-      createdById: p.createdById,
-      createdBy: p.createdBy,
-      updatedById: p.updatedById,
-      updatedBy: p.updatedBy,
-      createdAt: p.createdAt,
-      updatedAt: p.updatedAt,
-    }));
+    return products.map((p: any) => {
+      let productTotalStock = 0;
+      let totalCostSum = 0;
+      
+      const mappedVariants = p.variants.map((v: any) => {
+        let relevantStocks = v.warehouseStocks || [];
+        if (params.warehouseId) {
+          relevantStocks = relevantStocks.filter((s: any) => s.warehouseId === params.warehouseId);
+        }
+        const variantStock = relevantStocks.reduce((sum: number, s: any) => sum + s.stock, 0);
+        
+        productTotalStock += variantStock;
+        totalCostSum += (variantStock * v.priceCost);
+        
+        return {
+          id: v.id,
+          productId: v.productId,
+          variantName: v.variantName,
+          sku: v.sku,
+          priceSell: v.priceSell,
+          priceCost: v.priceCost,
+          warehouseStocks: v.warehouseStocks,
+          createdById: v.createdById,
+          updatedById: v.updatedById,
+          createdAt: v.createdAt,
+          updatedAt: v.updatedAt,
+        };
+      });
+
+      const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+
+      return {
+        id: p.id,
+        name: p.name,
+        categoryId: p.categoryId,
+        category: p.category,
+        totalStock: productTotalStock,
+        avgCostPrice: avgCostPrice,
+        variants: mappedVariants,
+        createdById: p.createdById,
+        createdBy: p.createdBy,
+        updatedById: p.updatedById,
+        updatedBy: p.updatedBy,
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+      };
+    });
   }
 
   async getProductById(id: string): Promise<ProductItem | null> {
@@ -239,11 +232,15 @@ export class InventoryService {
         category: {
           select: { id: true, name: true, code: true },
         },
-        warehouse: {
-          select: { id: true, name: true, code: true },
-        },
         variants: {
           orderBy: { createdAt: "asc" },
+          include: {
+            warehouseStocks: {
+              include: {
+                warehouse: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
         },
         createdBy: {
           select: { id: true, name: true, email: true },
@@ -256,28 +253,39 @@ export class InventoryService {
 
     if (!product) return null;
 
+    let productTotalStock = 0;
+    let totalCostSum = 0;
+    
+    const mappedVariants = product.variants.map((v: any) => {
+      const variantStock = (v.warehouseStocks || []).reduce((sum: number, s: any) => sum + s.stock, 0);
+      productTotalStock += variantStock;
+      totalCostSum += (variantStock * v.priceCost);
+      
+      return {
+        id: v.id,
+        productId: v.productId,
+        variantName: v.variantName,
+        sku: v.sku,
+        priceSell: v.priceSell,
+        priceCost: v.priceCost,
+        warehouseStocks: v.warehouseStocks,
+        createdById: v.createdById,
+        updatedById: v.updatedById,
+        createdAt: v.createdAt,
+        updatedAt: v.updatedAt,
+      };
+    });
+
+    const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+
     return {
       id: product.id,
       name: product.name,
       categoryId: product.categoryId,
       category: product.category,
-      warehouseId: product.warehouseId,
-      warehouse: product.warehouse,
-      totalStock: product.totalStock,
-      avgCostPrice: product.avgCostPrice,
-      variants: product.variants.map((v) => ({
-        id: v.id,
-        productId: v.productId,
-        variantName: v.variantName,
-        sku: v.sku,
-        stock: v.stock,
-        priceSell: v.priceSell,
-        priceCost: v.priceCost,
-        createdById: v.createdById,
-        updatedById: v.updatedById,
-        createdAt: v.createdAt,
-        updatedAt: v.updatedAt,
-      })),
+      totalStock: productTotalStock,
+      avgCostPrice: avgCostPrice,
+      variants: mappedVariants,
       createdById: product.createdById,
       createdBy: product.createdBy,
       updatedById: product.updatedById,
@@ -308,7 +316,6 @@ export class InventoryService {
       throw new Error("1 produk wajib memiliki minimal 1 SKU / varian produk");
     }
 
-    // Verify category exists and is a leaf category (has no children)
     const category = await this.db.category.findUnique({
       where: { id: input.categoryId },
       include: { children: true },
@@ -322,7 +329,6 @@ export class InventoryService {
       );
     }
 
-    // Verify warehouse exists
     const warehouse = await this.db.warehouse.findUnique({
       where: { id: input.warehouseId },
     });
@@ -330,7 +336,6 @@ export class InventoryService {
       throw new Error("Gudang tidak ditemukan");
     }
 
-    // Validate each variant and check SKU uniqueness in batch
     const sanitizedVariants = input.variants.map((v, index) => {
       const variantName = v.variantName?.trim() || `Varian ${index + 1}`;
       const sku = this.validateSku(v.sku);
@@ -347,7 +352,6 @@ export class InventoryService {
       };
     });
 
-    // Check duplicate SKUs within input list
     const skuSet = new Set<string>();
     for (const v of sanitizedVariants) {
       if (skuSet.has(v.sku)) {
@@ -356,39 +360,36 @@ export class InventoryService {
       skuSet.add(v.sku);
     }
 
-    // Check existing SKU in database for the same warehouse
     const existingSkus = await this.db.productVariant.findMany({
       where: {
         sku: { in: Array.from(skuSet) },
-        product: { warehouseId: input.warehouseId },
       },
       select: { sku: true },
     });
 
     if (existingSkus.length > 0) {
-      throw new Error(`SKU "${existingSkus[0].sku}" sudah digunakan pada produk lain di gudang ini`);
+      throw new Error(`SKU "${existingSkus[0].sku}" sudah digunakan pada produk lain`);
     }
 
-    const { totalStock, avgCostPrice } = this.calculateStockAndAvgCost(sanitizedVariants);
-
-    // Create product and variants atomically using transaction
     const createdProduct = await this.db.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
           name,
           categoryId: input.categoryId,
-          warehouseId: input.warehouseId,
-          totalStock,
-          avgCostPrice,
           createdById: userId,
           variants: {
             create: sanitizedVariants.map((v) => ({
               variantName: v.variantName,
               sku: v.sku,
-              stock: v.stock,
               priceSell: v.priceSell,
               priceCost: v.priceCost,
               createdById: userId,
+              warehouseStocks: {
+                create: {
+                  warehouseId: input.warehouseId,
+                  stock: v.stock
+                }
+              }
             })),
           },
         },
@@ -421,9 +422,6 @@ export class InventoryService {
     const updateProductData: {
       name?: string;
       categoryId?: string;
-      warehouseId?: string;
-      totalStock?: number;
-      avgCostPrice?: number;
       updatedById?: string;
     } = {
       updatedById: userId,
@@ -453,17 +451,6 @@ export class InventoryService {
       updateProductData.categoryId = input.categoryId;
     }
 
-    if (input.warehouseId !== undefined) {
-      const warehouse = await this.db.warehouse.findUnique({
-        where: { id: input.warehouseId },
-      });
-      if (!warehouse) {
-        throw new Error("Gudang tidak ditemukan");
-      }
-      updateProductData.warehouseId = input.warehouseId;
-    }
-
-    // If variants are supplied, validate and sync
     if (input.variants !== undefined) {
       if (input.variants.length === 0) {
         throw new Error("1 produk wajib memiliki minimal 1 SKU / varian produk");
@@ -472,7 +459,7 @@ export class InventoryService {
       const sanitizedVariants = input.variants.map((v, index) => {
         const variantName = v.variantName?.trim() || `Varian ${index + 1}`;
         const sku = this.validateSku(v.sku);
-        const stock = Math.max(0, Math.floor(Number(v.stock) || 0));
+        const stock = v.stock !== undefined ? Math.max(0, Math.floor(Number(v.stock) || 0)) : undefined;
         const priceSell = Math.max(0, Number(v.priceSell) || 0);
         const priceCost = Math.max(0, Number(v.priceCost) || 0);
 
@@ -486,7 +473,6 @@ export class InventoryService {
         };
       });
 
-      // Check duplicates in input
       const skuSet = new Set<string>();
       for (const v of sanitizedVariants) {
         if (skuSet.has(v.sku)) {
@@ -495,34 +481,25 @@ export class InventoryService {
         skuSet.add(v.sku);
       }
 
-      // Check duplicate SKUs in DB belonging to other products in the same warehouse
-      const currentWarehouseId = input.warehouseId || existing.warehouseId;
       const existingVariantsInDb = await this.db.productVariant.findMany({
         where: {
           sku: { in: Array.from(skuSet) },
           productId: { not: id },
-          product: { warehouseId: currentWarehouseId },
         },
         select: { sku: true },
       });
 
       if (existingVariantsInDb.length > 0) {
         throw new Error(
-          `SKU "${existingVariantsInDb[0].sku}" sudah digunakan pada produk lain di gudang ini`
+          `SKU "${existingVariantsInDb[0].sku}" sudah digunakan pada produk lain`
         );
       }
-
-      const { totalStock, avgCostPrice } = this.calculateStockAndAvgCost(sanitizedVariants);
-      updateProductData.totalStock = totalStock;
-      updateProductData.avgCostPrice = avgCostPrice;
 
       const inputVariantIds = sanitizedVariants
         .map((v) => v.id)
         .filter((vid): vid is string => Boolean(vid));
 
-      // Execute transaction for atomic variant sync
       await this.db.$transaction(async (tx) => {
-        // Delete removed variants
         await tx.productVariant.deleteMany({
           where: {
             productId: id,
@@ -530,7 +507,6 @@ export class InventoryService {
           },
         });
 
-        // Update existing or create new variants
         for (const v of sanitizedVariants) {
           if (v.id) {
             await tx.productVariant.update({
@@ -538,35 +514,41 @@ export class InventoryService {
               data: {
                 variantName: v.variantName,
                 sku: v.sku,
-                stock: v.stock,
                 priceSell: v.priceSell,
                 priceCost: v.priceCost,
                 updatedById: userId,
               },
             });
+            if (input.warehouseId && v.stock !== undefined) {
+              await tx.productVariantStock.upsert({
+                where: { variantId_warehouseId: { variantId: v.id, warehouseId: input.warehouseId } },
+                update: { stock: v.stock },
+                create: { variantId: v.id, warehouseId: input.warehouseId, stock: v.stock }
+              });
+            }
           } else {
             await tx.productVariant.create({
               data: {
                 productId: id,
                 variantName: v.variantName,
                 sku: v.sku,
-                stock: v.stock,
                 priceSell: v.priceSell,
                 priceCost: v.priceCost,
                 createdById: userId,
+                warehouseStocks: input.warehouseId && v.stock !== undefined ? {
+                  create: { warehouseId: input.warehouseId, stock: v.stock }
+                } : undefined
               },
             });
           }
         }
 
-        // Update product header
         await tx.product.update({
           where: { id },
           data: updateProductData,
         });
       });
     } else {
-      // Just update product fields without touching variants
       await this.db.product.update({
         where: { id },
         data: updateProductData,
@@ -595,38 +577,19 @@ export class InventoryService {
       throw new Error("Harga modal harus berupa angka valid dan tidak boleh negatif");
     }
 
-    const product = await this.db.product.findUnique({
-      where: { id: productId },
-      include: { variants: true },
+    const targetVariant = await this.db.productVariant.findUnique({
+      where: { id: input.variantId },
+      include: { warehouseStocks: { where: { warehouseId: input.warehouseId } } }
     });
 
-    if (!product) {
-      throw new Error("Produk tidak ditemukan");
-    }
-
-    const targetVariant = product.variants.find((v) => v.id === input.variantId);
     if (!targetVariant) {
       throw new Error("Varian produk tidak ditemukan");
     }
 
-    // Moving Average Calculation according to PRD 4.4:
-    // ((Stok Lama * Avg Cost Lama) + (Stok Baru * Harga Beli Baru)) / Total Stok Baru
-    const oldProductTotalStock = product.totalStock;
-    const oldProductAvgCost = product.avgCostPrice;
-    const newProductTotalStock = oldProductTotalStock + addedStock;
-
-    const newProductAvgCostPrice =
-      newProductTotalStock > 0
-        ? Math.round(
-            (((oldProductTotalStock * oldProductAvgCost) + (addedStock * priceCost)) /
-              newProductTotalStock) *
-              100
-          ) / 100
-        : priceCost;
-
-    // Moving average for the specific variant
-    const oldVariantStock = targetVariant.stock;
+    const variantStockRecord = targetVariant.warehouseStocks[0];
+    const oldVariantStock = variantStockRecord ? variantStockRecord.stock : 0;
     const oldVariantPriceCost = targetVariant.priceCost;
+
     const newVariantStock = oldVariantStock + addedStock;
     const newVariantPriceCost =
       newVariantStock > 0
@@ -641,19 +604,15 @@ export class InventoryService {
       await tx.productVariant.update({
         where: { id: targetVariant.id },
         data: {
-          stock: newVariantStock,
           priceCost: newVariantPriceCost,
           updatedById: userId,
         },
       });
 
-      await tx.product.update({
-        where: { id: productId },
-        data: {
-          totalStock: newProductTotalStock,
-          avgCostPrice: newProductAvgCostPrice,
-          updatedById: userId,
-        },
+      await tx.productVariantStock.upsert({
+        where: { variantId_warehouseId: { variantId: targetVariant.id, warehouseId: input.warehouseId } },
+        update: { stock: newVariantStock },
+        create: { variantId: targetVariant.id, warehouseId: input.warehouseId, stock: newVariantStock }
       });
     });
 
@@ -667,13 +626,24 @@ export class InventoryService {
   async deleteProduct(id: string): Promise<{ success: boolean }> {
     const existing = await this.db.product.findUnique({
       where: { id },
+      include: {
+        transactionItems: { take: 1 },
+        transferItems: { take: 1 },
+      }
     });
 
     if (!existing) {
       throw new Error("Produk tidak ditemukan");
     }
 
-    // Cascade delete is configured in schema for variants
+    if (existing.transactionItems.length > 0) {
+      throw new Error("Gagal Menghapus: Produk ini sudah memiliki riwayat transaksi penjualan. Sistem melarang penghapusan untuk menjaga integritas data laporan keuangan.");
+    }
+
+    if (existing.transferItems.length > 0) {
+      throw new Error("Gagal Menghapus: Produk ini sudah pernah dimutasi (Stock Transfer). Sistem melarang penghapusan untuk menjaga integritas riwayat pergerakan barang.");
+    }
+
     await this.db.product.delete({
       where: { id },
     });

@@ -24,6 +24,7 @@ import {
   LayersIcon,
   RowsIcon,
   ScanBarcodeIcon,
+  DatabaseIcon,
 } from "lucide-react"
 
 const allNavItems = [
@@ -69,6 +70,13 @@ const allNavItems = [
     icon: <ScanBarcodeIcon />,
     roles: ["SUPER_ADMIN", "CASHIER"],
   },
+  {
+    title: "Backup",
+    url: "/backup",
+    icon: <DatabaseIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
