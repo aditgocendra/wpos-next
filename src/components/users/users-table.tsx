@@ -262,49 +262,64 @@ export function UsersTable() {
         enableSorting: false,
         cell: ({ row }) => {
           const user = row.original;
+          const isSuperAdmin = user.role === "SUPER_ADMIN";
           const isToggling = togglingId === user.id;
 
           return (
             <div className="flex items-center gap-3">
               {/* Disable / Enable Switch */}
-              <div className="flex items-center gap-1.5" title={`Toggle status (${user.status})`}>
+              <div
+                className="flex items-center gap-1.5"
+                title={
+                  isSuperAdmin
+                    ? "Status Super Admin tidak dapat dinonaktifkan"
+                    : `Toggle status (${user.status})`
+                }
+              >
                 <Switch
                   checked={user.status === "ACTIVE"}
-                  disabled={isToggling}
+                  disabled={isToggling || isSuperAdmin}
                   onCheckedChange={(checked) => handleToggleStatus(user, checked)}
                   aria-label="Toggle user active status"
                 />
               </div>
 
-              {/* Edit Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setSelectedUser(user);
-                  setFormDialogOpen(true);
-                }}
-                title="Edit user"
-              >
-                <PencilIcon className="h-4 w-4" />
-                <span className="sr-only">Edit</span>
-              </Button>
+              {/* Edit and Delete buttons hidden for Super Admin */}
+              {!isSuperAdmin ? (
+                <>
+                  {/* Edit Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSelectedUser(user);
+                      setFormDialogOpen(true);
+                    }}
+                    title="Edit user"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                    <span className="sr-only">Edit</span>
+                  </Button>
 
-              {/* Delete Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  setUserToDelete(user);
-                  setDeleteDialogOpen(true);
-                }}
-                title="Delete user"
-              >
-                <Trash2Icon className="h-4 w-4" />
-                <span className="sr-only">Delete</span>
-              </Button>
+                  {/* Delete Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      setUserToDelete(user);
+                      setDeleteDialogOpen(true);
+                    }}
+                    title="Delete user"
+                  >
+                    <Trash2Icon className="h-4 w-4" />
+                    <span className="sr-only">Delete</span>
+                  </Button>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground italic px-1">Protected</span>
+              )}
             </div>
           );
         },
