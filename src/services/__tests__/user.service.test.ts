@@ -215,6 +215,17 @@ describe("UserService Unit Tests", () => {
         "Cannot delete currently logged-in user"
       );
     });
+
+    it("should throw error when attempting to delete a SUPER_ADMIN", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...sampleUser,
+        role: "SUPER_ADMIN",
+      });
+
+      await expect(userService.deleteUser("u-super", "u-other")).rejects.toThrow(
+        "Cannot delete Super Admin account"
+      );
+    });
   });
 
   describe("toggleUserStatus", () => {
@@ -247,6 +258,18 @@ describe("UserService Unit Tests", () => {
         expect.objectContaining({
           data: { status: "ACTIVE" },
         })
+      );
+    });
+
+    it("should throw error when trying to deactivate SUPER_ADMIN", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...sampleUser,
+        role: "SUPER_ADMIN",
+        status: "ACTIVE",
+      });
+
+      await expect(userService.toggleUserStatus("u-super", "INACTIVE")).rejects.toThrow(
+        "Cannot deactivate Super Admin account"
       );
     });
   });

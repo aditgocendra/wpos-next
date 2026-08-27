@@ -210,6 +210,10 @@ export class UserService {
       throw new Error("User not found");
     }
 
+    if (user.role === "SUPER_ADMIN") {
+      throw new Error("Cannot delete Super Admin account");
+    }
+
     await this.db.user.delete({
       where: { id },
     });
@@ -226,8 +230,16 @@ export class UserService {
       throw new Error("User not found");
     }
 
+    if (user.role === "SUPER_ADMIN" && newStatus === "INACTIVE") {
+      throw new Error("Cannot deactivate Super Admin account");
+    }
+
     const targetStatus: UserStatus =
       newStatus ?? (user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
+
+    if (user.role === "SUPER_ADMIN" && targetStatus === "INACTIVE") {
+      throw new Error("Cannot deactivate Super Admin account");
+    }
 
     const updatedUser = await this.db.user.update({
       where: { id },
