@@ -6,6 +6,7 @@ describe("UserService Unit Tests", () => {
   let userService: UserService;
   let mockPrisma: {
     user: {
+      count: ReturnType<typeof vi.fn>;
       findMany: ReturnType<typeof vi.fn>;
       findUnique: ReturnType<typeof vi.fn>;
       create: ReturnType<typeof vi.fn>;
@@ -43,6 +44,7 @@ describe("UserService Unit Tests", () => {
   beforeEach(() => {
     mockPrisma = {
       user: {
+        count: vi.fn(),
         findMany: vi.fn(),
         findUnique: vi.fn(),
         create: vi.fn(),
@@ -55,6 +57,26 @@ describe("UserService Unit Tests", () => {
       },
     };
     userService = new UserService(mockPrisma as unknown as ConstructorParameters<typeof UserService>[0]);
+  });
+
+  describe("countUsers & hasAnyUser", () => {
+    it("should return correct user count", async () => {
+      mockPrisma.user.count.mockResolvedValue(5);
+      const count = await userService.countUsers();
+      expect(count).toBe(5);
+    });
+
+    it("should return true when users exist", async () => {
+      mockPrisma.user.count.mockResolvedValue(1);
+      const exists = await userService.hasAnyUser();
+      expect(exists).toBe(true);
+    });
+
+    it("should return false when database has 0 users", async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      const exists = await userService.hasAnyUser();
+      expect(exists).toBe(false);
+    });
   });
 
   describe("getAllUsers", () => {

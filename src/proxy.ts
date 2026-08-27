@@ -8,6 +8,8 @@ export async function proxy(req: NextRequest) {
   // Skip public assets and static files
   if (
     pathname.startsWith("/api/auth") ||
+    pathname.startsWith("/api/setup") ||
+    pathname === "/setup" ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.includes(".")

@@ -35,6 +35,18 @@ describe("Proxy & RBAC Route Protection", () => {
       expect(res.headers.get("location")).toBeNull();
     });
 
+    it("should allow /setup and /api/setup routes without checking token", async () => {
+      const reqSetup = createMockRequest("http://localhost:3000/setup");
+      const resSetup = await proxy(reqSetup);
+      expect(nextAuthJwt.getToken).not.toHaveBeenCalled();
+      expect(resSetup.headers.get("location")).toBeNull();
+
+      const reqSetupApi = createMockRequest("http://localhost:3000/api/setup");
+      const resSetupApi = await proxy(reqSetupApi);
+      expect(nextAuthJwt.getToken).not.toHaveBeenCalled();
+      expect(resSetupApi.headers.get("location")).toBeNull();
+    });
+
     it("should allow /_next static files without checking token", async () => {
       const req = createMockRequest("http://localhost:3000/_next/static/chunks/main.js");
       const res = await proxy(req);
