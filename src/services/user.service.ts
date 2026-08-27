@@ -35,6 +35,15 @@ export interface UpdateUserInput {
 export class UserService {
   constructor(private db = defaultPrisma) {}
 
+  async countUsers(): Promise<number> {
+    return this.db.user.count();
+  }
+
+  async hasAnyUser(): Promise<boolean> {
+    const count = await this.countUsers();
+    return count > 0;
+  }
+
   async getAllUsers(): Promise<UserItem[]> {
     const users = await this.db.user.findMany({
       orderBy: { createdAt: "desc" },
