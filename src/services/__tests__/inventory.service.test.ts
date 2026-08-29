@@ -212,7 +212,15 @@ describe("InventoryService Unit Tests", () => {
       );
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
+      expect(mockPrisma.product.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            warehouseId: "wh-main",
+          }),
+        })
+      );
       expect(result.name).toBe("Sony WF-1000XM5");
+      expect(result.warehouseId).toBe("wh-main");
       expect(result.variants).toHaveLength(2);
       expect(result.totalStock).toBe(25);
     });
