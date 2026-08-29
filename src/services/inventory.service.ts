@@ -17,6 +17,7 @@ export interface ProductVariantItem {
   productId: string;
   variantName: string;
   sku: string;
+  stock?: number;
   priceSell: number;
   priceCost: number;
   warehouseStocks?: ProductVariantStockItem[];
@@ -204,6 +205,7 @@ export class InventoryService {
           productId: v.productId,
           variantName: v.variantName,
           sku: v.sku,
+          stock: variantStock,
           priceSell: v.priceSell,
           priceCost: v.priceCost,
           warehouseStocks: v.warehouseStocks,
@@ -280,6 +282,7 @@ export class InventoryService {
         productId: v.productId,
         variantName: v.variantName,
         sku: v.sku,
+        stock: variantStock,
         priceSell: v.priceSell,
         priceCost: v.priceCost,
         warehouseStocks: v.warehouseStocks,
