@@ -190,15 +190,22 @@ export function TransactionFormDialog({
     return allProducts.filter((p) => p.name.toLowerCase().includes(searchLower));
   }, [allProducts, productSearch]);
 
-  // When selectedProduct changes, select first variant by default
+  // When selectedProduct changes, select first available variant with stock > 0 by default
   React.useEffect(() => {
     if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
-      setSelectedVariantId(selectedProduct.variants[0].id);
+      const availableVariant = selectedProduct.variants.find((v) => (v.stock ?? 0) > 0);
+      setSelectedVariantId(availableVariant ? availableVariant.id : selectedProduct.variants[0].id);
       setAddQuantity(1);
     } else {
       setSelectedVariantId("");
     }
   }, [selectedProduct]);
+
+  // Selected variant helper
+  const selectedVariant = React.useMemo(() => {
+    if (!selectedProduct || !selectedVariantId) return null;
+    return selectedProduct.variants.find((v) => v.id === selectedVariantId) || null;
+  }, [selectedProduct, selectedVariantId]);
 
   // Total Payment calculation
   const totalAmount = React.useMemo(() => {
@@ -216,9 +223,16 @@ export function TransactionFormDialog({
       return;
     }
 
-    if (!isEdit && variant.stock < addQuantity) {
+    if ((variant.stock ?? 0) <= 0) {
       setError(
-        `Stok tidak mencukupi untuk varian ${variant.variantName}. Stok tersedia: ${variant.stock}`
+        `Varian ${variant.variantName} sedang habis (Stok 0) dan tidak dapat dipilih`
+      );
+      return;
+    }
+
+    if (!isEdit && (variant.stock ?? 0) < addQuantity) {
+      setError(
+        `Stok tidak mencukupi untuk varian ${variant.variantName}. Stok tersedia: ${variant.stock ?? 0}`
       );
       return;
     }
@@ -340,8 +354,6 @@ export function TransactionFormDialog({
       setLoading(false);
     }
   };
-
-  const selectedVariant = selectedProduct?.variants.find((v) => v.id === selectedVariantId);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -482,16 +494,19 @@ export function TransactionFormDialog({
                       <SelectValue placeholder="Pilih Varian" />
                     </SelectTrigger>
                     <SelectContent>
-                      {selectedProduct.variants.map((v) => (
-                        <SelectItem
-                          key={v.id}
-                          value={v.id}
-                          disabled={!isEdit && v.stock <= 0}
-                        >
-                          {v.variantName} - Rp {v.priceSell.toLocaleString("id-ID")}{" "}
-                          (Stok: {v.stock})
-                        </SelectItem>
-                      ))}
+                      {selectedProduct.variants.map((v) => {
+                        const isOutOfStock = (v.stock ?? 0) <= 0;
+                        return (
+                          <SelectItem
+                            key={v.id}
+                            value={v.id}
+                            disabled={isOutOfStock}
+                          >
+                            {v.variantName} - Rp {v.priceSell.toLocaleString("id-ID")}{" "}
+                            {isOutOfStock ? "(Stok Habis)" : `(Stok: ${v.stock})`}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -532,6 +547,7 @@ export function TransactionFormDialog({
                   <Button
                     type="button"
                     onClick={handleAddToCart}
+                    disabled={!selectedVariant || (selectedVariant.stock ?? 0) <= 0}
                     className="w-full gap-2 h-9"
                   >
                     <PlusIcon className="size-4" />
