@@ -19,23 +19,23 @@ export async function GET(req: NextRequest) {
     const fromParam = searchParams.get("from");
     const toParam = searchParams.get("to");
 
-    // 1. Fetch all data
+    // 1. Fetch all data (excluding users)
     const [
-      users,
       warehouses,
       categories,
       products,
       productVariants,
+      productVariantStocks,
       stockTransfers,
       stockTransferItems,
       transactions,
       transactionItems,
     ] = await Promise.all([
-      prisma.user.findMany(),
       prisma.warehouse.findMany(),
       prisma.category.findMany(),
       prisma.product.findMany(),
       prisma.productVariant.findMany(),
+      prisma.productVariantStock.findMany(),
       prisma.stockTransfer.findMany(),
       prisma.stockTransferItem.findMany(),
       prisma.transaction.findMany(),
@@ -45,11 +45,11 @@ export async function GET(req: NextRequest) {
     const backupData = {
       timestamp: new Date().toISOString(),
       models: {
-        users,
         warehouses,
         categories,
         products,
         productVariants,
+        productVariantStocks,
         stockTransfers,
         stockTransferItems,
         transactions,
