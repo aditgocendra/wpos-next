@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { userService } from "@/services/user.service";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const hasUsers = await userService.hasAnyUser();
