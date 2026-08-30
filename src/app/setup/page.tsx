@@ -4,6 +4,8 @@ import { userService } from "@/services/user.service";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Setup Awal | WPOS - Warehouse & POS System",
   description: "Inisialisasi sistem WPOS dan pembuatan akun Super Admin pertama",
