@@ -40,6 +40,8 @@ import { TransactionReportTable } from "./transaction-report-table";
 import { exportToExcel } from "@/lib/excel-export";
 import type { ProductReportItem, TransactionReportItem } from "@/services/report.service";
 
+import { useCategory } from "@/providers/category-provider";
+
 interface CategoryOption {
   id: string;
   name: string;
@@ -64,7 +66,7 @@ export function ReportView() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Options State
-  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const { categories } = useCategory();
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   // Data State
@@ -73,20 +75,11 @@ export function ReportView() {
   const [loading, setLoading] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
-  // Fetch filter options (Categories & Warehouses)
+  // Fetch filter options (Warehouses)
   useEffect(() => {
     async function loadOptions() {
       try {
-        const [catRes, whRes] = await Promise.all([
-          fetch("/api/categories"),
-          fetch("/api/warehouses"),
-        ]);
-
-        if (catRes.ok) {
-          const catJson = await catRes.json();
-          if (catJson.categories) setCategories(catJson.categories);
-        }
-
+        const whRes = await fetch("/api/warehouses");
         if (whRes.ok) {
           const whJson = await whRes.json();
           if (whJson.warehouses) setWarehouses(whJson.warehouses);

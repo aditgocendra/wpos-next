@@ -52,6 +52,8 @@ import { CategoryFormDialog } from "@/components/categories/category-form-dialog
 import { CategoryDetailDialog, formatDateTime } from "@/components/categories/category-detail-dialog";
 import { CategoryDeleteDialog } from "@/components/categories/category-delete-dialog";
 
+import { useCategory } from "@/providers/category-provider";
+
 const pageSizeItems = [
   { label: "5", value: "5" },
   { label: "10", value: "10" },
@@ -60,9 +62,7 @@ const pageSizeItems = [
 ];
 
 export function CategoryTable() {
-  const [categories, setCategories] = React.useState<CategoryItem[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const { categories, isLoading: loading, error, refreshCategories: fetchCategories } = useCategory();
   const [searchQuery, setSearchQuery] = React.useState("");
 
   // Dialog States
@@ -89,31 +89,6 @@ export function CategoryTable() {
       desc: false, // Sort ascending by default: Root (level 0) -> Subkategori (level 1 -> 2...)
     },
   ]);
-
-  const fetchCategories = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch("/api/categories");
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Gagal memuat data kategori");
-      }
-
-      setCategories(data.categories || []);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Terjadi kesalahan saat memuat data"
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    fetchCategories();
-  }, [fetchCategories]);
 
   // Filter categories based on search query
   const filteredData = React.useMemo(() => {

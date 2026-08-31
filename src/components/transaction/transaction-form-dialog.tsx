@@ -101,9 +101,10 @@ export function TransactionFormDialog({
   const [notes, setNotes] = React.useState<string>("");
   const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
 
-  // Product Search State
+  // Product Search State (Async with Debounce)
   const [productSearch, setProductSearch] = React.useState<string>("");
-  const [allProducts, setAllProducts] = React.useState<ProductOption[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = React.useState<string>("");
+  const [searchResults, setSearchResults] = React.useState<ProductOption[]>([]);
   const [loadingProducts, setLoadingProducts] = React.useState<boolean>(false);
   const [selectedProduct, setSelectedProduct] = React.useState<ProductOption | null>(null);
   const [selectedVariantId, setSelectedVariantId] = React.useState<string>("");
@@ -113,11 +114,61 @@ export function TransactionFormDialog({
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Debounce search input
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(productSearch);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
+
+  // Fetch products asynchronously on debounced search query
+  React.useEffect(() => {
+    if (!selectedWarehouseId || !debouncedSearch.trim() || selectedProduct) {
+      if (!debouncedSearch.trim()) {
+        setSearchResults([]);
+      }
+      return;
+    }
+
+    let isMounted = true;
+    const fetchSearchResults = async () => {
+      setLoadingProducts(true);
+      try {
+        const res = await fetch(
+          `/api/inventory?warehouseId=${selectedWarehouseId}&search=${encodeURIComponent(
+            debouncedSearch.trim()
+          )}&limit=100`
+        );
+        const data = await res.json();
+        if (isMounted) {
+          const items = data.data || data.products || [];
+          if (res.ok) {
+            setSearchResults(items);
+          } else {
+            setSearchResults([]);
+          }
+        }
+      } catch {
+        if (isMounted) setSearchResults([]);
+      } finally {
+        if (isMounted) setLoadingProducts(false);
+      }
+    };
+
+    fetchSearchResults();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [debouncedSearch, selectedWarehouseId, selectedProduct]);
+
   // Reset or initialize form when opened
   React.useEffect(() => {
     if (open) {
       setError(null);
       setProductSearch("");
+      setSearchResults([]);
       setSelectedProduct(null);
       setSelectedVariantId("");
       setAddQuantity(1);
@@ -148,47 +199,6 @@ export function TransactionFormDialog({
       }
     }
   }, [open, transaction, userWarehouseId, warehouses]);
-
-  // Load products when selectedWarehouseId changes
-  React.useEffect(() => {
-    if (!selectedWarehouseId) {
-      setAllProducts([]);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchWarehouseProducts = async () => {
-      setLoadingProducts(true);
-      try {
-        const res = await fetch(`/api/inventory?warehouseId=${selectedWarehouseId}`);
-        const data = await res.json();
-        if (isMounted) {
-          if (res.ok && data.products) {
-            setAllProducts(data.products);
-          } else {
-            setAllProducts([]);
-          }
-        }
-      } catch {
-        if (isMounted) setAllProducts([]);
-      } finally {
-        if (isMounted) setLoadingProducts(false);
-      }
-    };
-
-    fetchWarehouseProducts();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedWarehouseId]);
-
-  // Filter products by search term (case insensitive)
-  const filteredProducts = React.useMemo(() => {
-    if (!productSearch.trim()) return [];
-    const searchLower = productSearch.toLowerCase();
-    return allProducts.filter((p) => p.name.toLowerCase().includes(searchLower));
-  }, [allProducts, productSearch]);
 
   // When selectedProduct changes, select first available variant with stock > 0 by default
   React.useEffect(() => {
@@ -453,14 +463,20 @@ export function TransactionFormDialog({
               {/* Autocomplete / Search Dropdown List */}
               {productSearch.trim() && !selectedProduct && (
                 <div className="absolute z-50 left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-md divide-y">
-                  {filteredProducts.length > 0 ? (
-                    filteredProducts.map((prod) => (
+                  {loadingProducts ? (
+                    <div className="px-4 py-3 text-sm text-center text-muted-foreground flex items-center justify-center gap-2">
+                      <Loader2Icon className="size-4 animate-spin text-primary" />
+                      <span>Mencari produk...</span>
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    searchResults.map((prod) => (
                       <button
                         type="button"
                         key={prod.id}
                         onClick={() => {
                           setSelectedProduct(prod);
                           setProductSearch(prod.name);
+                          setSearchResults([]);
                         }}
                         className="w-full text-left px-4 py-2.5 hover:bg-muted/80 flex items-center justify-between transition-colors text-sm"
                       >
