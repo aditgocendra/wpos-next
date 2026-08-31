@@ -86,11 +86,11 @@ describe("WarehouseService Unit Tests", () => {
       expect(result[0].adminUser).toBeNull();
     });
 
-    it("should map _count.products to productsCount correctly", async () => {
+    it("should map _count.productVariantStocks to productsCount correctly", async () => {
       mockPrisma.warehouse.findMany.mockResolvedValue([
         {
           ...sampleWarehouse,
-          _count: { products: 15 },
+          _count: { productVariantStocks: 15 },
         },
       ]);
 

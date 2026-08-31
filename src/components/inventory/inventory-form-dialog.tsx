@@ -90,7 +90,7 @@ export function InventoryFormDialog({
     if (product) {
       setName(product.name);
       setCategoryId(product.categoryId);
-      setWarehouseId(product.warehouseId || "");
+      setCategoryId(product.categoryId);
       setVariants(
         product.variants.map((v) => ({
           id: v.id,
@@ -248,7 +248,7 @@ export function InventoryFormDialog({
       return;
     }
 
-    if (!warehouseId) {
+    if (!isEditing && !warehouseId) {
       setError("Gudang penyimpanan wajib dipilih");
       return;
     }
@@ -280,7 +280,7 @@ export function InventoryFormDialog({
       const payload = {
         name: trimmedName,
         categoryId,
-        warehouseId,
+        ...(isEditing ? {} : { warehouseId }),
         variants: variants.map((v) => ({
           ...(v.id ? { id: v.id } : {}),
           variantName: v.variantName.trim() || "Standard",

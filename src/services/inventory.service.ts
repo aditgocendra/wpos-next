@@ -36,12 +36,6 @@ export interface ProductItem {
     name: string;
     code: string;
   };
-  warehouseId?: string | null;
-  warehouse?: {
-    id: string;
-    name: string;
-    code: string | null;
-  } | null;
   totalStock: number;
   avgCostPrice: number;
   variants: ProductVariantItem[];
@@ -164,9 +158,6 @@ export class InventoryService {
         category: {
           select: { id: true, name: true, code: true },
         },
-        warehouse: {
-          select: { id: true, name: true, code: true },
-        },
         variants: {
           orderBy: { createdAt: "asc" },
           include: {
@@ -223,8 +214,6 @@ export class InventoryService {
         name: p.name,
         categoryId: p.categoryId,
         category: p.category,
-        warehouseId: p.warehouseId,
-        warehouse: p.warehouse,
         totalStock: productTotalStock,
         avgCostPrice: avgCostPrice,
         variants: mappedVariants,
@@ -243,9 +232,6 @@ export class InventoryService {
       where: { id },
       include: {
         category: {
-          select: { id: true, name: true, code: true },
-        },
-        warehouse: {
           select: { id: true, name: true, code: true },
         },
         variants: {
@@ -300,8 +286,6 @@ export class InventoryService {
       name: product.name,
       categoryId: product.categoryId,
       category: product.category,
-      warehouseId: product.warehouseId,
-      warehouse: product.warehouse,
       totalStock: productTotalStock,
       avgCostPrice: avgCostPrice,
       variants: mappedVariants,
@@ -395,7 +379,6 @@ export class InventoryService {
         data: {
           name,
           categoryId: input.categoryId,
-          warehouseId: input.warehouseId,
           createdById: userId,
           variants: {
             create: sanitizedVariants.map((v) => ({
@@ -442,7 +425,6 @@ export class InventoryService {
     const updateProductData: {
       name?: string;
       categoryId?: string;
-      warehouseId?: string;
       updatedById?: string;
     } = {
       updatedById: userId,
@@ -470,10 +452,6 @@ export class InventoryService {
         );
       }
       updateProductData.categoryId = input.categoryId;
-    }
-
-    if (input.warehouseId !== undefined) {
-      updateProductData.warehouseId = input.warehouseId;
     }
 
     if (input.variants !== undefined) {

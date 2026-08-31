@@ -58,7 +58,7 @@ export class WarehouseService {
     updatedAt: Date;
     admin?: WarehouseUserInfo | null;
     _count?: {
-      products: number;
+      productVariantStocks: number;
     };
   }): WarehouseItem {
     return {
@@ -66,7 +66,7 @@ export class WarehouseService {
       name: warehouse.name,
       code: warehouse.code,
       address: warehouse.address,
-      productsCount: warehouse._count?.products ?? 0,
+      productsCount: warehouse._count?.productVariantStocks ?? 0,
       adminUser: warehouse.admin || null,
       createdAt: warehouse.createdAt,
       updatedAt: warehouse.updatedAt,
@@ -88,7 +88,7 @@ export class WarehouseService {
         },
         _count: {
           select: {
-            products: true,
+            productVariantStocks: true,
           },
         },
       },
@@ -112,7 +112,7 @@ export class WarehouseService {
         },
         _count: {
           select: {
-            products: true,
+            productVariantStocks: true,
           },
         },
       },
@@ -185,7 +185,7 @@ export class WarehouseService {
         },
         _count: {
           select: {
-            products: true,
+            productVariantStocks: true,
           },
         },
       },
