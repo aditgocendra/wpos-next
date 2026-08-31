@@ -35,7 +35,7 @@ describe("WarehouseService Unit Tests", () => {
     address: "Jl. Merdeka No. 10",
     createdAt: new Date("2026-01-01T10:00:00Z"),
     updatedAt: new Date("2026-01-01T10:00:00Z"),
-    admin: sampleAdminUser,
+    users: [sampleAdminUser],
   };
 
   beforeEach(() => {
@@ -77,7 +77,7 @@ describe("WarehouseService Unit Tests", () => {
       mockPrisma.warehouse.findMany.mockResolvedValue([
         {
           ...sampleWarehouse,
-          admin: null,
+          users: [],
         },
       ]);
 
@@ -147,7 +147,7 @@ describe("WarehouseService Unit Tests", () => {
         address: "Jl. Sudirman",
         createdAt: new Date(),
         updatedAt: new Date(),
-        admin: null,
+        users: [],
       });
 
       const result = await warehouseService.createWarehouse({
@@ -174,7 +174,7 @@ describe("WarehouseService Unit Tests", () => {
         .mockResolvedValueOnce({
           ...sampleWarehouse,
           id: "wh-new",
-          admin: sampleAdminUser,
+          users: [sampleAdminUser],
         }); // getWarehouseById refresh
       mockPrisma.warehouse.create.mockResolvedValue({
         id: "wh-new",
@@ -183,7 +183,7 @@ describe("WarehouseService Unit Tests", () => {
         address: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        admin: null,
+        users: [],
       });
       mockPrisma.user.findUnique.mockResolvedValue({
         id: "user-admin-1",
@@ -238,13 +238,15 @@ describe("WarehouseService Unit Tests", () => {
         .mockResolvedValueOnce({
           ...sampleWarehouse,
           name: "Gudang Utama Renamed",
-          admin: {
-            id: "user-admin-2",
-            name: "New Admin",
-            email: "newadmin@example.com",
-            role: "WAREHOUSE_ADMIN",
-            status: "ACTIVE",
-          },
+          users: [
+            {
+              id: "user-admin-2",
+              name: "New Admin",
+              email: "newadmin@example.com",
+              role: "WAREHOUSE_ADMIN",
+              status: "ACTIVE",
+            },
+          ],
         }); // refreshed check
 
       const result = await warehouseService.updateWarehouse("wh-1", {
@@ -284,8 +286,8 @@ describe("WarehouseService Unit Tests", () => {
       mockPrisma.warehouse.delete.mockResolvedValue(sampleWarehouse);
 
       const result = await warehouseService.deleteWarehouse("wh-1");
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: "user-admin-1" },
+      expect(mockPrisma.user.updateMany).toHaveBeenCalledWith({
+        where: { warehouseId: "wh-1" },
         data: { warehouseId: null },
       });
       expect(mockPrisma.warehouse.delete).toHaveBeenCalledWith({

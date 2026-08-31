@@ -110,7 +110,7 @@ export function UserFormDialog({
           email: email.trim(),
           role,
           status,
-          warehouseId: role === "WAREHOUSE_ADMIN" ? (warehouseId || null) : null,
+          warehouseId: (role === "WAREHOUSE_ADMIN" || role === "CASHIER") ? (warehouseId || null) : null,
         };
         if (password.trim()) {
           payload.password = password.trim();
@@ -135,7 +135,7 @@ export function UserFormDialog({
             password: password.trim(),
             role,
             status,
-            warehouseId: role === "WAREHOUSE_ADMIN" ? (warehouseId || null) : null,
+            warehouseId: (role === "WAREHOUSE_ADMIN" || role === "CASHIER") ? (warehouseId || null) : null,
           }),
         });
 
@@ -228,8 +228,8 @@ export function UserFormDialog({
               </Select>
             </div>
 
-            {/* Warehouse Combobox (Active only for Warehouse Admin) */}
-            {role === "WAREHOUSE_ADMIN" && (
+            {/* Warehouse Combobox (Active for Warehouse Admin and Cashier) */}
+            {(role === "WAREHOUSE_ADMIN" || role === "CASHIER") && (
               <div className="space-y-1.5">
                 <Label htmlFor="user-warehouse">Assigned Warehouse (Optional)</Label>
                 {warehouses.length === 0 ? (

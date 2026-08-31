@@ -141,13 +141,12 @@ describe("UserService Unit Tests", () => {
       ).rejects.toThrow("Email already registered");
     });
 
-    it("should clear warehouseId if role is not WAREHOUSE_ADMIN", async () => {
+    it("should allow assigning warehouseId for CASHIER", async () => {
       mockPrisma.user.findUnique.mockResolvedValue(null);
       mockPrisma.user.create.mockResolvedValue({
         ...sampleUser,
         role: "CASHIER",
-        warehouseId: null,
-        warehouse: null,
+        warehouseId: "wh-1",
       });
 
       await userService.createUser({
@@ -161,6 +160,32 @@ describe("UserService Unit Tests", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             role: "CASHIER",
+            warehouseId: "wh-1",
+          }),
+        })
+      );
+    });
+
+    it("should clear warehouseId if role is SUPER_ADMIN", async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
+        ...sampleUser,
+        role: "SUPER_ADMIN",
+        warehouseId: null,
+        warehouse: null,
+      });
+
+      await userService.createUser({
+        email: "superadmin@example.com",
+        password: "password123",
+        role: "SUPER_ADMIN",
+        warehouseId: "wh-1",
+      });
+
+      expect(mockPrisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            role: "SUPER_ADMIN",
             warehouseId: null,
           }),
         })

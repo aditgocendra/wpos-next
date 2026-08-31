@@ -35,7 +35,7 @@ model User {
   password            String
   role                Role             @default(CASHIER)
   status              UserStatus       @default(ACTIVE)
-  warehouseId         String?          @unique
+  warehouseId         String?
   warehouse           Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   productsCreated     Product[]        @relation("ProductCreatedBy")
   productsUpdated     Product[]        @relation("ProductUpdatedBy")
@@ -56,7 +56,7 @@ model Warehouse {
   name                 String
   code                 String?               @unique
   address              String?
-  admin                User?
+  users                User[]
   sourceTransfers      StockTransfer[]       @relation("SourceTransfers")
   destinationTransfers StockTransfer[]       @relation("DestinationTransfers")
   transactions         Transaction[]

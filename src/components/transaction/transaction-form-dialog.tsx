@@ -192,13 +192,15 @@ export function TransactionFormDialog({
       } else {
         // Create mode
         const defaultWarehouse =
-          userWarehouseId || (warehouses.length > 0 ? warehouses[0].id : "");
+          (userRole === "CASHIER" && userWarehouseId)
+            ? userWarehouseId
+            : userWarehouseId || (warehouses.length > 0 ? warehouses[0].id : "");
         setSelectedWarehouseId(defaultWarehouse);
         setNotes("");
         setCartItems([]);
       }
     }
-  }, [open, transaction, userWarehouseId, warehouses]);
+  }, [open, transaction, userWarehouseId, userRole, warehouses]);
 
   // When selectedProduct changes, select first available variant with stock > 0 by default
   React.useEffect(() => {
@@ -405,7 +407,7 @@ export function TransactionFormDialog({
                     setProductSearch("");
                   }
                 }}
-                disabled={isEdit || (userRole === "CASHIER" && Boolean(userWarehouseId))}
+                disabled={isEdit || userRole === "CASHIER"}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Pilih Gudang..." />

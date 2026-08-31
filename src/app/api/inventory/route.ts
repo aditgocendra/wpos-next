@@ -29,10 +29,12 @@ export async function GET(req: Request) {
     const page = pageParam ? parseInt(pageParam, 10) : undefined;
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-    // If user is WAREHOUSE_ADMIN and has assigned warehouse, default to their warehouse if not specified
     let warehouseId = warehouseIdParam;
-    if (session.user.role === "WAREHOUSE_ADMIN" && session.user.warehouseId) {
-      warehouseId = warehouseIdParam || session.user.warehouseId;
+    if (
+      (session.user.role === "WAREHOUSE_ADMIN" || session.user.role === "CASHIER") &&
+      session.user.warehouseId
+    ) {
+      warehouseId = session.user.warehouseId;
     }
 
     const result = await inventoryService.getProducts({
