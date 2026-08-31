@@ -381,14 +381,14 @@ export function InventoryFormDialog({
 
               <div className="space-y-1.5">
                 <Label htmlFor="prod-warehouse" className="text-xs font-semibold">
-                  Gudang Penyimpanan <span className="text-destructive">*</span>
+                  Gudang Penyimpanan {isEditing ? <span className="text-muted-foreground font-normal ml-1">(Tidak dapat diubah)</span> : <span className="text-destructive">*</span>}
                 </Label>
                 <Select
                   value={warehouseId}
                   onValueChange={(val) => {
                     if (val) setWarehouseId(val);
                   }}
-                  disabled={loading}
+                  disabled={loading || isEditing}
                 >
                   <SelectTrigger id="prod-warehouse" className="w-full">
                     <SelectValue placeholder="Pilih Gudang" />
@@ -533,7 +533,7 @@ export function InventoryFormDialog({
                       {/* Stock */}
                       <div className="sm:col-span-4 space-y-1">
                         <Label className="text-[11px] font-medium text-muted-foreground">
-                          Stok Awal (Unit)
+                          Stok Awal (Unit) {isEditing && Boolean(v.id) && <span className="text-[10px] ml-1">(Terkunci)</span>}
                         </Label>
                         <Input
                           type="number"
@@ -542,7 +542,7 @@ export function InventoryFormDialog({
                           onChange={(e) =>
                             handleVariantChange(index, "stock", e.target.value)
                           }
-                          disabled={loading}
+                          disabled={loading || (isEditing && Boolean(v.id))}
                           className="h-8 text-xs"
                           required
                         />
@@ -551,7 +551,7 @@ export function InventoryFormDialog({
                       {/* Price Cost (Modal) */}
                       <div className="sm:col-span-6 space-y-1">
                         <Label className="text-[11px] font-medium text-muted-foreground">
-                          Harga Modal / Beli (HPP) Rp
+                          Harga Modal / Beli (HPP) Rp {isEditing && Boolean(v.id) && <span className="text-[10px] ml-1">(Otomatis via Averaging)</span>}
                         </Label>
                         <Input
                           type="number"
@@ -560,7 +560,7 @@ export function InventoryFormDialog({
                           onChange={(e) =>
                             handleVariantChange(index, "priceCost", e.target.value)
                           }
-                          disabled={loading}
+                          disabled={loading || (isEditing && Boolean(v.id))}
                           className="h-8 text-xs"
                           required
                         />

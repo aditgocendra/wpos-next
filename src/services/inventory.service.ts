@@ -523,6 +523,12 @@ export class InventoryService {
               },
             });
             if (input.warehouseId && v.stock !== undefined) {
+              await tx.productVariantStock.deleteMany({
+                where: {
+                  variantId: v.id,
+                  warehouseId: { not: input.warehouseId },
+                },
+              });
               await tx.productVariantStock.upsert({
                 where: { variantId_warehouseId: { variantId: v.id, warehouseId: input.warehouseId } },
                 update: { stock: v.stock },
