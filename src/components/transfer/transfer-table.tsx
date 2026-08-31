@@ -84,6 +84,9 @@ export function TransferTable() {
   const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(
     null
   );
+  const [userWarehouseId, setUserWarehouseId] = React.useState<string | null>(
+    null
+  );
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -135,8 +138,12 @@ export function TransferTable() {
         const res = await fetch("/api/auth/session");
         if (res.ok) {
           const data = await res.json();
-          if (data?.user?.role) {
-            setCurrentUserRole(data.user.role);
+          if (data?.user) {
+            setCurrentUserRole(data.user.role || null);
+            setUserWarehouseId(data.user.warehouseId || null);
+            if (data.user.role === "WAREHOUSE_ADMIN" && data.user.warehouseId) {
+              setSelectedWarehouseFilter(data.user.warehouseId);
+            }
           }
         }
       } catch {
@@ -451,6 +458,7 @@ export function TransferTable() {
               onValueChange={(val) => {
                 if (val) setSelectedWarehouseFilter(val);
               }}
+              disabled={currentUserRole === "WAREHOUSE_ADMIN" && Boolean(userWarehouseId)}
             >
               <SelectTrigger className="h-9 text-xs">
                 <SelectValue placeholder="Semua Gudang" />
@@ -789,6 +797,8 @@ export function TransferTable() {
         transfer={selectedTransferForEdit}
         warehouses={warehouses}
         onSuccess={fetchTransfers}
+        userRole={currentUserRole}
+        userWarehouseId={userWarehouseId}
       />
 
       <TransferDetailDialog

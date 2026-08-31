@@ -56,18 +56,19 @@ export class WarehouseService {
     address: string | null;
     createdAt: Date;
     updatedAt: Date;
-    admin?: WarehouseUserInfo | null;
+    users?: WarehouseUserInfo[] | null;
     _count?: {
       productVariantStocks: number;
     };
   }): WarehouseItem {
+    const adminUser = warehouse.users?.find((u) => u.role === "WAREHOUSE_ADMIN") || warehouse.users?.[0] || null;
     return {
       id: warehouse.id,
       name: warehouse.name,
       code: warehouse.code,
       address: warehouse.address,
       productsCount: warehouse._count?.productVariantStocks ?? 0,
-      adminUser: warehouse.admin || null,
+      adminUser,
       createdAt: warehouse.createdAt,
       updatedAt: warehouse.updatedAt,
     };
@@ -77,7 +78,7 @@ export class WarehouseService {
     const warehouses = await this.db.warehouse.findMany({
       orderBy: { createdAt: "desc" },
       include: {
-        admin: {
+        users: {
           select: {
             id: true,
             name: true,
@@ -101,7 +102,7 @@ export class WarehouseService {
     const warehouse = await this.db.warehouse.findUnique({
       where: { id },
       include: {
-        admin: {
+        users: {
           select: {
             id: true,
             name: true,
@@ -174,7 +175,7 @@ export class WarehouseService {
         address,
       },
       include: {
-        admin: {
+        users: {
           select: {
             id: true,
             name: true,
@@ -219,7 +220,7 @@ export class WarehouseService {
     const existing = await this.db.warehouse.findUnique({
       where: { id },
       include: {
-        admin: {
+        users: {
           select: {
             id: true,
             name: true,
@@ -273,11 +274,12 @@ export class WarehouseService {
 
     // Handle admin user assignment/reassignment if specified
     if (input.adminUserId !== undefined) {
+      const currentAdmin = existing.users?.find((u) => u.role === "WAREHOUSE_ADMIN");
       if (input.adminUserId) {
         // Disassociate previous warehouse admin user from this warehouse if different
-        if (existing.admin && existing.admin.id !== input.adminUserId) {
+        if (currentAdmin && currentAdmin.id !== input.adminUserId) {
           await this.db.user.update({
-            where: { id: existing.admin.id },
+            where: { id: currentAdmin.id },
             data: { warehouseId: null },
           });
         }
@@ -289,9 +291,9 @@ export class WarehouseService {
         });
       } else {
         // Unassign currently assigned admin user
-        if (existing.admin) {
+        if (currentAdmin) {
           await this.db.user.update({
-            where: { id: existing.admin.id },
+            where: { id: currentAdmin.id },
             data: { warehouseId: null },
           });
         }
@@ -309,7 +311,7 @@ export class WarehouseService {
     const existing = await this.db.warehouse.findUnique({
       where: { id },
       include: {
-        admin: true,
+        users: true,
       },
     });
 
@@ -317,13 +319,11 @@ export class WarehouseService {
       throw new Error("Warehouse not found");
     }
 
-    // Explicitly unassign the admin user if exists
-    if (existing.admin) {
-      await this.db.user.update({
-        where: { id: existing.admin.id },
-        data: { warehouseId: null },
-      });
-    }
+    // Explicitly unassign users if exist
+    await this.db.user.updateMany({
+      where: { warehouseId: id },
+      data: { warehouseId: null },
+    });
 
     await this.db.warehouse.delete({
       where: { id },

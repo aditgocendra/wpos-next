@@ -52,6 +52,8 @@ interface TransferFormDialogProps {
   transfer: StockTransferData | null; // null = Create, object = Edit
   warehouses: WarehouseOption[];
   onSuccess: () => void;
+  userRole?: string | null;
+  userWarehouseId?: string | null;
 }
 
 export function TransferFormDialog({
@@ -60,6 +62,8 @@ export function TransferFormDialog({
   transfer,
   warehouses,
   onSuccess,
+  userRole,
+  userWarehouseId,
 }: TransferFormDialogProps) {
   const isEdit = !!transfer;
 
@@ -127,14 +131,22 @@ export function TransferFormDialog({
           );
         });
       } else {
-        setSourceWarehouseId("");
+        const defaultSource =
+          userRole === "WAREHOUSE_ADMIN" && userWarehouseId
+            ? userWarehouseId
+            : "";
+        setSourceWarehouseId(defaultSource);
         setDestinationWarehouseId("");
         setNotes("");
-        setAvailableProducts([]);
         setItems([{ productId: "", variantId: "", quantity: 1, maxStock: 0 }]);
+        if (defaultSource) {
+          fetchProductsForWarehouse(defaultSource);
+        } else {
+          setAvailableProducts([]);
+        }
       }
     }
-  }, [open, transfer, fetchProductsForWarehouse]);
+  }, [open, transfer, userRole, userWarehouseId, fetchProductsForWarehouse]);
 
   const handleSourceWarehouseChange = (whId: string) => {
     setSourceWarehouseId(whId);
@@ -350,7 +362,7 @@ export function TransferFormDialog({
                 onValueChange={(val) => {
                   if (val) handleSourceWarehouseChange(val);
                 }}
-                disabled={isEdit}
+                disabled={isEdit || (userRole === "WAREHOUSE_ADMIN" && Boolean(userWarehouseId))}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Pilih Gudang Asal" />

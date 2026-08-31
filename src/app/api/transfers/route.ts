@@ -26,9 +26,9 @@ export async function GET(req: Request) {
     const search = searchParams.get("search") || undefined;
 
     let warehouseId = warehouseIdParam;
-    // If warehouse admin, default filter to their warehouse if not specified
+    // If warehouse admin, strictly filter to their warehouse
     if (session.user.role === "WAREHOUSE_ADMIN" && session.user.warehouseId) {
-      warehouseId = warehouseIdParam || session.user.warehouseId;
+      warehouseId = session.user.warehouseId;
     }
 
     const transfers = await transferService.getTransfers({
@@ -62,7 +62,11 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { sourceWarehouseId, destinationWarehouseId, items, notes } = body;
+    let { sourceWarehouseId, destinationWarehouseId, items, notes } = body;
+
+    if (session.user.role === "WAREHOUSE_ADMIN" && session.user.warehouseId) {
+      sourceWarehouseId = session.user.warehouseId;
+    }
 
     if (!sourceWarehouseId || !destinationWarehouseId) {
       return NextResponse.json(

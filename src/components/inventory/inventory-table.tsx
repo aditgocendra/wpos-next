@@ -121,20 +121,40 @@ export function InventoryTable() {
 
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
-  // Load warehouses once on mount
+  const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(null);
+  const [userWarehouseId, setUserWarehouseId] = React.useState<string | null>(null);
+
+  // Load warehouses & session once on mount
   React.useEffect(() => {
-    async function loadWarehouses() {
+    async function loadInitialData() {
       try {
-        const whRes = await fetch("/api/warehouses");
+        const [whRes, sessionRes] = await Promise.all([
+          fetch("/api/warehouses"),
+          fetch("/api/auth/session"),
+        ]);
         if (whRes.ok) {
           const whData = await whRes.json();
           setWarehouses(whData.warehouses || []);
+        }
+        if (sessionRes.ok) {
+          const sessionData = await sessionRes.json();
+          if (sessionData?.user) {
+            setCurrentUserRole(sessionData.user.role || null);
+            setUserWarehouseId(sessionData.user.warehouseId || null);
+            if (
+              (sessionData.user.role === "WAREHOUSE_ADMIN" ||
+                sessionData.user.role === "CASHIER") &&
+              sessionData.user.warehouseId
+            ) {
+              setSelectedWarehouseFilter(sessionData.user.warehouseId);
+            }
+          }
         }
       } catch {
         // ignore
       }
     }
-    loadWarehouses();
+    loadInitialData();
   }, []);
 
   const fetchData = React.useCallback(async () => {
@@ -479,6 +499,11 @@ export function InventoryTable() {
             onValueChange={(val) => {
               if (val) handleWarehouseFilterChange(val);
             }}
+            disabled={
+              (currentUserRole === "WAREHOUSE_ADMIN" ||
+                currentUserRole === "CASHIER") &&
+              Boolean(userWarehouseId)
+            }
           >
             <SelectTrigger className="w-[170px] h-9 text-xs">
               <WarehouseIcon className="size-3.5 mr-1.5 text-muted-foreground" />

@@ -232,7 +232,7 @@ export function UsersTable() {
         id: "warehouse",
         cell: ({ row }) => {
           const user = row.original;
-          if (user.role === "CASHIER" || !user.warehouse) {
+          if (!user.warehouse) {
             return <span className="text-muted-foreground">-</span>;
           }
           return (

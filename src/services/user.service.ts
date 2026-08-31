@@ -97,14 +97,7 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(input.password, 10);
 
     const warehouseId =
-      input.role === "WAREHOUSE_ADMIN" ? input.warehouseId || null : null;
-
-    if (warehouseId) {
-      await this.db.user.updateMany({
-        where: { warehouseId },
-        data: { warehouseId: null },
-      });
-    }
+      input.role === "SUPER_ADMIN" ? null : input.warehouseId || null;
 
     const user = await this.db.user.create({
       data: {
@@ -164,20 +157,17 @@ export class UserService {
 
     if (input.role) {
       updateData.role = input.role;
-      if (input.role !== "WAREHOUSE_ADMIN") {
+      if (input.role === "SUPER_ADMIN") {
         updateData.warehouseId = null;
       } else if (input.warehouseId !== undefined) {
         updateData.warehouseId = input.warehouseId || null;
       }
     } else if (input.warehouseId !== undefined) {
-      updateData.warehouseId = input.warehouseId || null;
-    }
-
-    if (updateData.warehouseId) {
-      await this.db.user.updateMany({
-        where: { warehouseId: updateData.warehouseId, NOT: { id } },
-        data: { warehouseId: null },
-      });
+      if (existing.role === "SUPER_ADMIN") {
+        updateData.warehouseId = null;
+      } else {
+        updateData.warehouseId = input.warehouseId || null;
+      }
     }
 
     if (input.status) {

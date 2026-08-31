@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
     let warehouseId = warehouseIdParam;
     if (session.user.role === "CASHIER" && session.user.warehouseId) {
-      warehouseId = warehouseIdParam || session.user.warehouseId;
+      warehouseId = session.user.warehouseId;
     }
 
     const transactions = await transactionService.getTransactions({
@@ -58,7 +58,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { warehouseId, items, notes } = body;
+    const { items, notes } = body;
+    let warehouseId = body.warehouseId;
+
+    if (session.user.role === "CASHIER" && session.user.warehouseId) {
+      warehouseId = session.user.warehouseId;
+    }
 
     if (!warehouseId) {
       return NextResponse.json(
