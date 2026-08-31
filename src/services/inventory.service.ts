@@ -97,6 +97,18 @@ export interface GetProductsParams {
   warehouseId?: string;
   categoryId?: string;
   search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedProductsResult {
+  data: ProductItem[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 export class InventoryService {
@@ -126,7 +138,7 @@ export class InventoryService {
     return formatted;
   }
 
-  async getProducts(params: GetProductsParams = {}): Promise<ProductItem[]> {
+  async getProducts(params: GetProductsParams = {}): Promise<PaginatedProductsResult> {
     const whereClause: any = {};
 
     if (params.warehouseId) {
@@ -151,33 +163,42 @@ export class InventoryService {
       ];
     }
 
-    const products = await this.db.product.findMany({
-      where: whereClause,
-      orderBy: { createdAt: "desc" },
-      include: {
-        category: {
-          select: { id: true, name: true, code: true },
-        },
-        variants: {
-          orderBy: { createdAt: "asc" },
-          include: {
-            warehouseStocks: {
-              include: {
-                warehouse: { select: { id: true, name: true, code: true } },
+    const page = Math.max(1, Number(params.page) || 1);
+    const hasLimit = params.limit !== undefined && Number(params.limit) > 0;
+    const limit = hasLimit ? Number(params.limit) : undefined;
+    const skip = hasLimit ? (page - 1) * limit! : undefined;
+
+    const [total, products] = await Promise.all([
+      this.db.product.count({ where: whereClause }),
+      this.db.product.findMany({
+        where: whereClause,
+        orderBy: { createdAt: "desc" },
+        ...(hasLimit ? { take: limit, skip } : {}),
+        include: {
+          category: {
+            select: { id: true, name: true, code: true },
+          },
+          variants: {
+            orderBy: { createdAt: "asc" },
+            include: {
+              warehouseStocks: {
+                include: {
+                  warehouse: { select: { id: true, name: true, code: true } },
+                },
               },
             },
           },
+          createdBy: {
+            select: { id: true, name: true, email: true },
+          },
+          updatedBy: {
+            select: { id: true, name: true, email: true },
+          },
         },
-        createdBy: {
-          select: { id: true, name: true, email: true },
-        },
-        updatedBy: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+      }),
+    ]);
 
-    return products.map((p: any) => {
+    const data: ProductItem[] = products.map((p: any) => {
       let productTotalStock = 0;
       let totalCostSum = 0;
       
@@ -225,6 +246,19 @@ export class InventoryService {
         updatedAt: p.updatedAt,
       };
     });
+
+    const effectiveLimit = limit || (total > 0 ? total : 1);
+    const totalPages = Math.ceil(total / effectiveLimit) || 1;
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit: limit || total,
+        totalPages,
+      },
+    };
   }
 
   async getProductById(id: string): Promise<ProductItem | null> {

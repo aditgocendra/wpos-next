@@ -23,6 +23,11 @@ export async function GET(req: Request) {
     const warehouseIdParam = searchParams.get("warehouseId") || undefined;
     const categoryId = searchParams.get("categoryId") || undefined;
     const search = searchParams.get("search") || undefined;
+    const pageParam = searchParams.get("page");
+    const limitParam = searchParams.get("limit");
+
+    const page = pageParam ? parseInt(pageParam, 10) : undefined;
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
     // If user is WAREHOUSE_ADMIN and has assigned warehouse, default to their warehouse if not specified
     let warehouseId = warehouseIdParam;
@@ -30,13 +35,19 @@ export async function GET(req: Request) {
       warehouseId = warehouseIdParam || session.user.warehouseId;
     }
 
-    const products = await inventoryService.getProducts({
+    const result = await inventoryService.getProducts({
       warehouseId,
       categoryId,
       search,
+      page,
+      limit,
     });
 
-    return NextResponse.json({ products });
+    return NextResponse.json({
+      products: result.data,
+      data: result.data,
+      meta: result.meta,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal Server Error";

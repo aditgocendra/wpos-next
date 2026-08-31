@@ -63,22 +63,25 @@ import {
 } from "@/components/inventory/inventory-detail-dialog";
 import { InventoryDeleteDialog } from "@/components/inventory/inventory-delete-dialog";
 import { InventoryAddStockDialog } from "@/components/inventory/inventory-add-stock-dialog";
+import { useCategory } from "@/providers/category-provider";
 
 const pageSizeItems = [
-  { label: "5", value: "5" },
   { label: "10", value: "10" },
-  { label: "25", value: "25" },
+  { label: "20", value: "20" },
   { label: "50", value: "50" },
+  { label: "100", value: "100" },
 ];
 
 export function InventoryTable() {
+  const { categories } = useCategory();
   const [products, setProducts] = React.useState<ProductItem[]>([]);
-  const [categories, setCategories] = React.useState<CategoryItem[]>([]);
   const [warehouses, setWarehouses] = React.useState<
     { id: string; name: string; code?: string | null }[]
   >([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [totalCount, setTotalCount] = React.useState(0);
+  const [totalPages, setTotalPages] = React.useState(1);
 
   // Filters
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -118,31 +121,52 @@ export function InventoryTable() {
 
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
+  // Load warehouses once on mount
+  React.useEffect(() => {
+    async function loadWarehouses() {
+      try {
+        const whRes = await fetch("/api/warehouses");
+        if (whRes.ok) {
+          const whData = await whRes.json();
+          setWarehouses(whData.warehouses || []);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    loadWarehouses();
+  }, []);
+
   const fetchData = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch products, categories, and warehouses concurrently
-      const [prodRes, catRes, whRes] = await Promise.all([
-        fetch("/api/inventory"),
-        fetch("/api/categories"),
-        fetch("/api/warehouses"),
-      ]);
+      const params = new URLSearchParams();
+      params.set("page", String(pagination.pageIndex + 1));
+      params.set("limit", String(pagination.pageSize));
 
-      const [prodData, catData, whData] = await Promise.all([
-        prodRes.json(),
-        catRes.ok ? catRes.json() : { categories: [] },
-        whRes.ok ? whRes.json() : { warehouses: [] },
-      ]);
+      if (selectedWarehouseFilter !== "ALL") {
+        params.set("warehouseId", selectedWarehouseFilter);
+      }
+      if (selectedCategoryFilter !== "ALL") {
+        params.set("categoryId", selectedCategoryFilter);
+      }
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim());
+      }
+
+      const prodRes = await fetch(`/api/inventory?${params.toString()}`);
+      const prodData = await prodRes.json();
 
       if (!prodRes.ok) {
         throw new Error(prodData.error || "Gagal memuat data produk inventaris");
       }
 
-      setProducts(prodData.products || []);
-      setCategories(catData.categories || []);
-      setWarehouses(whData.warehouses || []);
+      const items = prodData.data || prodData.products || [];
+      setProducts(items);
+      setTotalCount(prodData.meta?.total ?? items.length);
+      setTotalPages(prodData.meta?.totalPages ?? 1);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Terjadi kesalahan saat memuat data"
@@ -150,43 +174,27 @@ export function InventoryTable() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.pageIndex, pagination.pageSize, selectedWarehouseFilter, selectedCategoryFilter, searchQuery]);
 
   React.useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Filtered Products
-  const filteredData = React.useMemo(() => {
-    let result = products;
+  // Reset pageIndex when filter changes
+  const handleWarehouseFilterChange = (wh: string) => {
+    setSelectedWarehouseFilter(wh);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
-    if (selectedWarehouseFilter !== "ALL") {
-      result = result.filter((p) => 
-        p.variants.some(v => v.warehouseStocks?.some(ws => ws.warehouseId === selectedWarehouseFilter))
-      );
-    }
+  const handleCategoryFilterChange = (cat: string) => {
+    setSelectedCategoryFilter(cat);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
-    if (selectedCategoryFilter !== "ALL") {
-      result = result.filter((p) => p.categoryId === selectedCategoryFilter);
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.category.name.toLowerCase().includes(q) ||
-          p.category.code.toLowerCase().includes(q) ||
-          p.variants.some(
-            (v) =>
-              v.sku.toLowerCase().includes(q) ||
-              v.variantName.toLowerCase().includes(q)
-          )
-      );
-    }
-
-    return result;
-  }, [products, searchQuery, selectedWarehouseFilter, selectedCategoryFilter]);
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  };
 
   const columns = React.useMemo<ColumnDef<ProductItem>[]>(
     () => [
@@ -393,8 +401,10 @@ export function InventoryTable() {
   );
 
   const table = useReactTable({
-    data: filteredData,
+    data: products,
     columns,
+    pageCount: totalPages,
+    manualPagination: true,
     getRowId: (row) => row.id,
     getRowCanExpand: (row) => Boolean(row.original.variants && row.original.variants.length > 0),
     state: {
@@ -406,7 +416,6 @@ export function InventoryTable() {
     onSortingChange: setSorting,
     onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
   });
@@ -453,59 +462,58 @@ export function InventoryTable() {
       {/* Filter / Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <div className="relative flex-1">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Cari produk (nama, SKU varian, kategori)..."
+            placeholder="Cari nama produk, SKU, kategori..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9"
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-9 bg-background h-9 text-xs"
           />
         </div>
 
-        <div className="flex gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
           {/* Warehouse Filter */}
-          <div className="w-full">
-            <Select
-              value={selectedWarehouseFilter}
-              onValueChange={(val) => {
-                if (val) setSelectedWarehouseFilter(val);
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Semua Gudang" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Semua Gudang</SelectItem>
-                {warehouses.map((wh) => (
-                  <SelectItem key={wh.id} value={wh.id}>
-                    {wh.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={selectedWarehouseFilter}
+            onValueChange={(val) => {
+              if (val) handleWarehouseFilterChange(val);
+            }}
+          >
+            <SelectTrigger className="w-[170px] h-9 text-xs">
+              <WarehouseIcon className="size-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Semua Gudang" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Gudang</SelectItem>
+              {warehouses.map((wh) => (
+                <SelectItem key={wh.id} value={wh.id}>
+                  {wh.name} {wh.code ? `(${wh.code})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* Category Filter */}
-          <div className="w-full">
-            <Select
-              value={selectedCategoryFilter}
-              onValueChange={(val) => {
-                if (val) setSelectedCategoryFilter(val);
-              }}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Semua Kategori" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Semua Kategori</SelectItem>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    [{cat.code}] {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={selectedCategoryFilter}
+            onValueChange={(val) => {
+              if (val) handleCategoryFilterChange(val);
+            }}
+          >
+            <SelectTrigger className="w-[180px] h-9 text-xs">
+              <FolderTreeIcon className="size-3.5 mr-1.5 text-muted-foreground" />
+              <SelectValue placeholder="Semua Kategori" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Semua Kategori</SelectItem>
+              {categories.map((cat: CategoryItem) => (
+                <SelectItem key={cat.id} value={cat.id}>
+                  [{cat.code}] {cat.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {(searchQuery ||
@@ -719,7 +727,7 @@ export function InventoryTable() {
           <span>
             dari{" "}
             <strong className="text-foreground font-semibold">
-              {filteredData.length}
+              {totalCount}
             </strong>{" "}
             total produk
           </span>

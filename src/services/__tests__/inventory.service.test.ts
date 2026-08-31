@@ -10,6 +10,7 @@ describe("InventoryService Unit Tests", () => {
       create: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
       delete: ReturnType<typeof vi.fn>;
+      count: ReturnType<typeof vi.fn>;
     };
     productVariant: {
       findMany: ReturnType<typeof vi.fn>;
@@ -121,6 +122,7 @@ describe("InventoryService Unit Tests", () => {
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
+        count: vi.fn(),
       },
       productVariant: {
         findMany: vi.fn(),
@@ -505,6 +507,46 @@ describe("InventoryService Unit Tests", () => {
       await expect(
         inventoryService.deleteProduct("non-existent")
       ).rejects.toThrow("Produk tidak ditemukan");
+    });
+  });
+
+  describe("getProducts (Server-Side Pagination)", () => {
+    it("should return paginated products with metadata", async () => {
+      mockPrisma.product.count.mockResolvedValue(25);
+      mockPrisma.product.findMany.mockResolvedValue([sampleProduct]);
+
+      const result = await inventoryService.getProducts({
+        page: 2,
+        limit: 10,
+      });
+
+      expect(mockPrisma.product.count).toHaveBeenCalled();
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          take: 10,
+          skip: 10,
+        })
+      );
+      expect(result.data).toHaveLength(1);
+      expect(result.meta).toEqual({
+        total: 25,
+        page: 2,
+        limit: 10,
+        totalPages: 3,
+      });
+    });
+
+    it("should default to page 1 and no skip if pagination params omitted", async () => {
+      mockPrisma.product.count.mockResolvedValue(1);
+      mockPrisma.product.findMany.mockResolvedValue([sampleProduct]);
+
+      const result = await inventoryService.getProducts();
+
+      expect(mockPrisma.product.count).toHaveBeenCalled();
+      expect(mockPrisma.product.findMany).toHaveBeenCalled();
+      expect(result.data).toHaveLength(1);
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.total).toBe(1);
     });
   });
 });
