@@ -20,6 +20,7 @@ describe("InventoryService Unit Tests", () => {
     };
     productVariantStock: {
       upsert: ReturnType<typeof vi.fn>;
+      deleteMany: ReturnType<typeof vi.fn>;
     };
     category: {
       findUnique: ReturnType<typeof vi.fn>;
@@ -130,6 +131,7 @@ describe("InventoryService Unit Tests", () => {
       },
       productVariantStock: {
         upsert: vi.fn(),
+        deleteMany: vi.fn(),
       },
       category: {
         findUnique: vi.fn(),
@@ -358,6 +360,52 @@ describe("InventoryService Unit Tests", () => {
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result.name).toBe("Sony WF-1000XM5 Updated");
+    });
+
+    it("should delete stock in other warehouses when warehouseId is updated on existing variant", async () => {
+      mockPrisma.product.findUnique
+        .mockResolvedValueOnce(sampleProduct) // existing check
+        .mockResolvedValueOnce(sampleProduct); // getProductById
+      mockPrisma.productVariant.findMany.mockResolvedValue([]); // duplicate check
+
+      await inventoryService.updateProduct(
+        "prod-1",
+        {
+          warehouseId: "wh-branch",
+          variants: [
+            {
+              id: "var-1",
+              variantName: "Black",
+              sku: "EAR-SON-WF1-BLK",
+              stock: 15,
+              priceCost: 3000000,
+              priceSell: 4200000,
+            },
+          ],
+        },
+        "usr-admin"
+      );
+
+      expect(mockPrisma.productVariantStock.deleteMany).toHaveBeenCalledWith({
+        where: {
+          variantId: "var-1",
+          warehouseId: { not: "wh-branch" },
+        },
+      });
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith({
+        where: {
+          variantId_warehouseId: {
+            variantId: "var-1",
+            warehouseId: "wh-branch",
+          },
+        },
+        update: { stock: 15 },
+        create: {
+          variantId: "var-1",
+          warehouseId: "wh-branch",
+          stock: 15,
+        },
+      });
     });
 
     it("should throw error if updating product with empty variants list", async () => {
