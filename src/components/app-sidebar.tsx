@@ -26,6 +26,7 @@ import {
   ScanBarcodeIcon,
   DatabaseIcon,
   FileSpreadsheetIcon,
+  ClipboardCheckIcon,
 } from "lucide-react"
 
 const allNavItems = [
@@ -58,6 +59,12 @@ const allNavItems = [
     title: "Inventory",
     url: "/inventory",
     icon: <BoxesIcon />,
+    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN"],
+  },
+  {
+    title: "Stock Opname",
+    url: "/opname",
+    icon: <ClipboardCheckIcon />,
     roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN"],
   },
   {
