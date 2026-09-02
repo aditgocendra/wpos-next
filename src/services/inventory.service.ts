@@ -1,4 +1,5 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
+import { deleteStorageFiles } from "@/lib/supabase";
 
 export interface ProductVariantStockItem {
   id: string;
@@ -12,11 +13,20 @@ export interface ProductVariantStockItem {
   stock: number;
 }
 
+export interface ProductImageItem {
+  id: string;
+  image: string;
+  productId: string;
+  variantId?: string | null;
+}
+
 export interface ProductVariantItem {
   id: string;
   productId: string;
   variantName: string;
   sku: string;
+  image?: string | null;
+  images?: ProductImageItem[];
   stock?: number;
   priceSell: number;
   priceCost: number;
@@ -38,6 +48,7 @@ export interface ProductItem {
   };
   totalStock: number;
   avgCostPrice: number;
+  image?: string | null;
   variants: ProductVariantItem[];
   createdById: string;
   createdBy: {
@@ -58,6 +69,7 @@ export interface ProductItem {
 export interface CreateVariantInput {
   variantName: string;
   sku: string;
+  image?: string | null;
   stock: number;
   priceSell: number;
   priceCost: number;
@@ -74,6 +86,7 @@ export interface UpdateVariantInput {
   id?: string; // If provided, update existing; if not, create new
   variantName: string;
   sku: string;
+  image?: string | null;
   stock?: number;
   priceSell: number;
   priceCost: number;
@@ -139,7 +152,7 @@ export class InventoryService {
   }
 
   async getProducts(params: GetProductsParams = {}): Promise<PaginatedProductsResult> {
-    const whereClause: any = {};
+    const whereClause: Record<string, unknown> = {};
 
     if (params.warehouseId) {
       whereClause.variants = {
@@ -169,9 +182,9 @@ export class InventoryService {
     const skip = hasLimit ? (page - 1) * limit! : undefined;
 
     const [total, products] = await Promise.all([
-      this.db.product.count({ where: whereClause }),
+      this.db.product.count({ where: whereClause as never }),
       this.db.product.findMany({
-        where: whereClause,
+        where: whereClause as never,
         orderBy: { createdAt: "desc" },
         ...(hasLimit ? { take: limit, skip } : {}),
         include: {
@@ -181,6 +194,7 @@ export class InventoryService {
           variants: {
             orderBy: { createdAt: "asc" },
             include: {
+              images: true,
               warehouseStocks: {
                 include: {
                   warehouse: { select: { id: true, name: true, code: true } },
@@ -198,25 +212,35 @@ export class InventoryService {
       }),
     ]);
 
-    const data: ProductItem[] = products.map((p: any) => {
+    const data: ProductItem[] = products.map((p) => {
       let productTotalStock = 0;
       let totalCostSum = 0;
       
-      const mappedVariants = p.variants.map((v: any) => {
+      const mappedVariants = p.variants.map((v) => {
         let relevantStocks = v.warehouseStocks || [];
         if (params.warehouseId) {
-          relevantStocks = relevantStocks.filter((s: any) => s.warehouseId === params.warehouseId);
+          relevantStocks = relevantStocks.filter((s) => s.warehouseId === params.warehouseId);
         }
-        const variantStock = relevantStocks.reduce((sum: number, s: any) => sum + s.stock, 0);
+        const variantStock = relevantStocks.reduce((sum, s) => sum + s.stock, 0);
         
         productTotalStock += variantStock;
         totalCostSum += (variantStock * v.priceCost);
         
+        const variantImages: ProductImageItem[] = (v.images || []).map((img) => ({
+          id: img.id,
+          image: img.image,
+          productId: img.productId,
+          variantId: img.variantId,
+        }));
+        const variantImage = variantImages.length > 0 ? variantImages[0].image : null;
+
         return {
           id: v.id,
           productId: v.productId,
           variantName: v.variantName,
           sku: v.sku,
+          image: variantImage,
+          images: variantImages,
           stock: variantStock,
           priceSell: v.priceSell,
           priceCost: v.priceCost,
@@ -229,6 +253,7 @@ export class InventoryService {
       });
 
       const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+      const primaryImage = mappedVariants.find((v) => v.image)?.image || null;
 
       return {
         id: p.id,
@@ -237,6 +262,7 @@ export class InventoryService {
         category: p.category,
         totalStock: productTotalStock,
         avgCostPrice: avgCostPrice,
+        image: primaryImage,
         variants: mappedVariants,
         createdById: p.createdById,
         createdBy: p.createdBy,
@@ -271,6 +297,7 @@ export class InventoryService {
         variants: {
           orderBy: { createdAt: "asc" },
           include: {
+            images: true,
             warehouseStocks: {
               include: {
                 warehouse: { select: { id: true, name: true, code: true } },
@@ -292,16 +319,26 @@ export class InventoryService {
     let productTotalStock = 0;
     let totalCostSum = 0;
     
-    const mappedVariants = product.variants.map((v: any) => {
-      const variantStock = (v.warehouseStocks || []).reduce((sum: number, s: any) => sum + s.stock, 0);
+    const mappedVariants = product.variants.map((v) => {
+      const variantStock = (v.warehouseStocks || []).reduce((sum, s) => sum + s.stock, 0);
       productTotalStock += variantStock;
       totalCostSum += (variantStock * v.priceCost);
       
+      const variantImages: ProductImageItem[] = (v.images || []).map((img) => ({
+        id: img.id,
+        image: img.image,
+        productId: img.productId,
+        variantId: img.variantId,
+      }));
+      const variantImage = variantImages.length > 0 ? variantImages[0].image : null;
+
       return {
         id: v.id,
         productId: v.productId,
         variantName: v.variantName,
         sku: v.sku,
+        image: variantImage,
+        images: variantImages,
         stock: variantStock,
         priceSell: v.priceSell,
         priceCost: v.priceCost,
@@ -314,6 +351,7 @@ export class InventoryService {
     });
 
     const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+    const primaryImage = mappedVariants.find((v) => v.image)?.image || null;
 
     return {
       id: product.id,
@@ -322,6 +360,7 @@ export class InventoryService {
       category: product.category,
       totalStock: productTotalStock,
       avgCostPrice: avgCostPrice,
+      image: primaryImage,
       variants: mappedVariants,
       createdById: product.createdById,
       createdBy: product.createdBy,
@@ -379,10 +418,12 @@ export class InventoryService {
       const stock = Math.max(0, Math.floor(Number(v.stock) || 0));
       const priceSell = Math.max(0, Number(v.priceSell) || 0);
       const priceCost = Math.max(0, Number(v.priceCost) || 0);
+      const image = v.image?.trim() || null;
 
       return {
         variantName,
         sku,
+        image,
         stock,
         priceSell,
         priceCost,
@@ -414,23 +455,37 @@ export class InventoryService {
           name,
           categoryId: input.categoryId,
           createdById: userId,
-          variants: {
-            create: sanitizedVariants.map((v) => ({
-              variantName: v.variantName,
-              sku: v.sku,
-              priceSell: v.priceSell,
-              priceCost: v.priceCost,
-              createdById: userId,
-              warehouseStocks: {
-                create: {
-                  warehouseId: input.warehouseId,
-                  stock: v.stock
-                }
-              }
-            })),
-          },
         },
       });
+
+      for (const v of sanitizedVariants) {
+        const variant = await tx.productVariant.create({
+          data: {
+            productId: product.id,
+            variantName: v.variantName,
+            sku: v.sku,
+            priceSell: v.priceSell,
+            priceCost: v.priceCost,
+            createdById: userId,
+            warehouseStocks: {
+              create: {
+                warehouseId: input.warehouseId,
+                stock: v.stock,
+              },
+            },
+          },
+        });
+
+        if (v.image) {
+          await tx.productImage.create({
+            data: {
+              productId: product.id,
+              variantId: variant.id,
+              image: v.image,
+            },
+          });
+        }
+      }
 
       return product;
     });
@@ -499,11 +554,13 @@ export class InventoryService {
         const stock = v.stock !== undefined ? Math.max(0, Math.floor(Number(v.stock) || 0)) : undefined;
         const priceSell = Math.max(0, Number(v.priceSell) || 0);
         const priceCost = Math.max(0, Number(v.priceCost) || 0);
+        const image = v.image !== undefined ? (v.image?.trim() || null) : undefined;
 
         return {
           id: v.id,
           variantName,
           sku,
+          image,
           stock,
           priceSell,
           priceCost,
@@ -536,7 +593,31 @@ export class InventoryService {
         .map((v) => v.id)
         .filter((vid): vid is string => Boolean(vid));
 
+      // Ambil seluruh foto varian yang ada saat ini untuk mendeteksi file yang diganti / dihapus
+      const existingProductImages = await this.db.productImage.findMany({
+        where: { productId: id },
+      });
+
+      const imagesToDeleteFromStorage: string[] = [];
+
       await this.db.$transaction(async (tx) => {
+        // Deteksi varian yang dihapus dan kumpulkan fotonya
+        const deletedVariants = await tx.productVariant.findMany({
+          where: {
+            productId: id,
+            id: { notIn: inputVariantIds },
+          },
+          include: { images: true },
+        });
+
+        for (const dv of deletedVariants) {
+          if (dv.images && dv.images.length > 0) {
+            for (const img of dv.images) {
+              imagesToDeleteFromStorage.push(img.image);
+            }
+          }
+        }
+
         await tx.productVariant.deleteMany({
           where: {
             productId: id,
@@ -545,6 +626,7 @@ export class InventoryService {
         });
 
         for (const v of sanitizedVariants) {
+          let variantId = v.id;
           if (v.id) {
             await tx.productVariant.update({
               where: { id: v.id },
@@ -570,7 +652,7 @@ export class InventoryService {
               });
             }
           } else {
-            await tx.productVariant.create({
+            const created = await tx.productVariant.create({
               data: {
                 productId: id,
                 variantName: v.variantName,
@@ -583,6 +665,32 @@ export class InventoryService {
                 } : undefined
               },
             });
+            variantId = created.id;
+          }
+
+          if (variantId && v.image !== undefined) {
+            // Cek apakah gambar varian ini diubah atau dihapus dari nilai sebelumnya
+            const previousImages = existingProductImages.filter(
+              (img) => img.variantId === variantId
+            );
+            for (const prevImg of previousImages) {
+              if (prevImg.image !== v.image) {
+                imagesToDeleteFromStorage.push(prevImg.image);
+              }
+            }
+
+            await tx.productImage.deleteMany({
+              where: { variantId },
+            });
+            if (v.image) {
+              await tx.productImage.create({
+                data: {
+                  productId: id,
+                  variantId,
+                  image: v.image,
+                },
+              });
+            }
           }
         }
 
@@ -591,6 +699,11 @@ export class InventoryService {
           data: updateProductData,
         });
       });
+
+      // Hapus file fisik dari Supabase Storage jika ada gambar lama yang diganti / dihapus
+      if (imagesToDeleteFromStorage.length > 0) {
+        await deleteStorageFiles(imagesToDeleteFromStorage);
+      }
     } else {
       await this.db.product.update({
         where: { id },
@@ -687,9 +800,19 @@ export class InventoryService {
       throw new Error("Gagal Menghapus: Produk ini sudah pernah dimutasi (Stock Transfer). Sistem melarang penghapusan untuk menjaga integritas riwayat pergerakan barang.");
     }
 
+    const productImages = await this.db.productImage.findMany({
+      where: { productId: id },
+      select: { image: true },
+    });
+
     await this.db.product.delete({
       where: { id },
     });
+
+    if (productImages.length > 0) {
+      const urls = productImages.map((pi) => pi.image);
+      await deleteStorageFiles(urls);
+    }
 
     return { success: true };
   }

@@ -20,8 +20,12 @@ import {
   TagIcon,
   TrendingUpIcon,
   LayersIcon,
+  ImageIcon,
+  ZoomInIcon,
 } from "lucide-react";
+import Image from "next/image";
 import type { ProductItem } from "@/services/inventory.service";
+import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 
 export function formatDateTime(dateInput: string | Date | undefined): string {
   if (!dateInput) return "-";
@@ -58,6 +62,8 @@ export function InventoryDetailDialog({
   product,
   onEdit,
 }: InventoryDetailDialogProps) {
+  const [zoomImage, setZoomImage] = React.useState<{ src: string; title: string } | null>(null);
+
   if (!product) return null;
 
   return (
@@ -162,38 +168,95 @@ export function InventoryDetailDialog({
               </div>
 
               <div className="space-y-2">
-                {product.variants.map((variant, idx) => (
-                  <div
-                    key={variant.id || idx}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{variant.variantName}</span>
-                        <Badge
-                          variant="outline"
-                          className="font-mono text-[11px] font-bold px-2 py-0.5 bg-background shadow-2xs"
-                        >
-                          {variant.sku}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Stok Tersedia (Total): <strong className="text-foreground">{variant.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0} unit</strong>
-                      </p>
-                    </div>
+                {product.variants.map((variant, idx) => {
+                  const variantImg =
+                    variant.image ||
+                    (variant.images && variant.images.length > 0
+                      ? variant.images[0].image
+                      : null);
 
-                    <div className="flex items-center gap-4 text-xs">
-                      <div className="text-right">
-                        <p className="text-muted-foreground text-[10px]">Harga Modal (Cost)</p>
-                        <p className="font-semibold">{formatRupiah(variant.priceCost)}</p>
+                  return (
+                    <div
+                      key={variant.id || idx}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {variantImg ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setZoomImage({
+                                src: variantImg,
+                                title: `${product.name} - ${variant.variantName}`,
+                              })
+                            }
+                            className="relative group size-12 rounded-lg overflow-hidden border bg-muted shrink-0 hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+                            title="Klik untuk memperbesar gambar"
+                          >
+                            <Image
+                              src={variantImg}
+                              alt={variant.variantName}
+                              fill
+                              unoptimized
+                              sizes="48px"
+                              className="object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <ZoomInIcon className="size-4 text-white" />
+                            </div>
+                          </button>
+                        ) : (
+                          <div className="size-12 rounded-lg border border-dashed flex items-center justify-center text-muted-foreground/40 bg-muted/10 shrink-0">
+                            <ImageIcon className="size-5" />
+                          </div>
+                        )}
+
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm">
+                              {variant.variantName}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-[11px] font-bold px-2 py-0.5 bg-background shadow-2xs"
+                            >
+                              {variant.sku}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Stok Tersedia (Total):{" "}
+                            <strong className="text-foreground">
+                              {variant.warehouseStocks?.reduce(
+                                (sum, s) => sum + s.stock,
+                                0
+                              ) || 0}{" "}
+                              unit
+                            </strong>
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-muted-foreground text-[10px]">Harga Jual (Sell)</p>
-                        <p className="font-bold text-primary">{formatRupiah(variant.priceSell)}</p>
+
+                      <div className="flex items-center gap-4 text-xs self-end sm:self-center">
+                        <div className="text-right">
+                          <p className="text-muted-foreground text-[10px]">
+                            Harga Modal (Cost)
+                          </p>
+                          <p className="font-semibold">
+                            {formatRupiah(variant.priceCost)}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-muted-foreground text-[10px]">
+                            Harga Jual (Sell)
+                          </p>
+                          <p className="font-bold text-primary">
+                            {formatRupiah(variant.priceSell)}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -227,6 +290,17 @@ export function InventoryDetailDialog({
           )}
           <Button onClick={() => onOpenChange(false)}>Tutup</Button>
         </DialogFooter>
+
+        {zoomImage && (
+          <ImageZoomDialog
+            open={Boolean(zoomImage)}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setZoomImage(null);
+            }}
+            src={zoomImage.src}
+            title={zoomImage.title}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
