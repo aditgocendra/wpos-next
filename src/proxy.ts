@@ -70,7 +70,8 @@ export async function proxy(req: NextRequest) {
         pathname.startsWith("/api/warehouses") ||
         pathname.startsWith("/api/transfers") ||
         pathname.startsWith("/api/inventory") ||
-        pathname.startsWith("/api/categories");
+        pathname.startsWith("/api/categories") ||
+        pathname.startsWith("/api/opname");
       if (!isAllowedApi) {
         return NextResponse.json(
           { error: "Forbidden: Akses ditolak untuk role Warehouse Admin" },
@@ -97,11 +98,12 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "WAREHOUSE_ADMIN") {
-    // WAREHOUSE_ADMIN can access dashboard (/), /transfers, and /inventory (warehouses & categories management are hidden)
+    // WAREHOUSE_ADMIN can access dashboard (/), /transfers, /inventory, and /opname (warehouses & categories management are hidden)
     const isTransferRoute =
       pathname.startsWith("/transfers") || pathname.startsWith("/transfer");
     const isInventoryRoute = pathname.startsWith("/inventory");
-    if (!isTransferRoute && !isInventoryRoute) {
+    const isOpnameRoute = pathname.startsWith("/opname");
+    if (!isTransferRoute && !isInventoryRoute && !isOpnameRoute) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   } else if (role === "SUPER_ADMIN") {

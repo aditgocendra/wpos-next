@@ -28,6 +28,12 @@ enum TransferStatus {
   CANCELLED
 }
 
+enum StockOpnameStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id                  String           @id @default(cuid())
   name                String?
@@ -45,6 +51,8 @@ model User {
   transfersUpdated    StockTransfer[]  @relation("TransfersUpdated")
   transactionsCreated Transaction[]    @relation("TransactionsCreated")
   transactionsUpdated Transaction[]    @relation("TransactionsUpdated")
+  opnamesCreated      StockOpname[]    @relation("OpnameCreated")
+  opnamesUpdated      StockOpname[]    @relation("OpnameUpdated")
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
 
@@ -60,6 +68,7 @@ model Warehouse {
   sourceTransfers      StockTransfer[]       @relation("SourceTransfers")
   destinationTransfers StockTransfer[]       @relation("DestinationTransfers")
   transactions         Transaction[]
+  stockOpnames         StockOpname[]
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   productVariantStocks ProductVariantStock[]
@@ -89,6 +98,7 @@ model Product {
   images           ProductImage[]
   transferItems    StockTransferItem[]
   transactionItems TransactionItem[]
+  opnameItems      StockOpnameItem[]
 
   category Category @relation(fields: [categoryId], references: [id])
 
@@ -116,6 +126,7 @@ model ProductVariant {
   images           ProductImage[]
   transferItems    StockTransferItem[]
   transactionItems TransactionItem[]
+  opnameItems      StockOpnameItem[]
   warehouseStocks  ProductVariantStock[]
 
   createdById String
@@ -247,4 +258,47 @@ model TransactionItem {
   @@index([productId])
   @@index([variantId])
   @@map("transaction_items")
+}
+
+model StockOpname {
+  id           String            @id @default(cuid())
+  opnameNumber String            @unique
+  warehouseId  String
+  status       StockOpnameStatus @default(DRAFT)
+  notes        String?
+  createdById  String
+  updatedById  String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  warehouse Warehouse         @relation(fields: [warehouseId], references: [id])
+  createdBy User              @relation("OpnameCreated", fields: [createdById], references: [id])
+  updatedBy User?             @relation("OpnameUpdated", fields: [updatedById], references: [id])
+  items     StockOpnameItem[]
+
+  @@index([warehouseId])
+  @@index([createdById])
+  @@map("stock_opnames")
+}
+
+model StockOpnameItem {
+  id          String   @id @default(cuid())
+  opnameId    String
+  productId   String
+  variantId   String
+  systemStock Int      @default(0)
+  actualStock Int      @default(0)
+  difference  Int      @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  opname  StockOpname    @relation(fields: [opnameId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([opnameId])
+  @@index([productId])
+  @@index([variantId])
+  @@map("stock_opname_items")
 }

@@ -175,7 +175,7 @@ describe("Proxy & RBAC Route Protection", () => {
       expect(resCat.headers.get("location")).toBe("http://localhost:3000/");
     });
 
-    it("WAREHOUSE_ADMIN: should allow /, /transfers, /transfer, and /inventory", async () => {
+    it("WAREHOUSE_ADMIN: should allow /, /transfers, /transfer, /inventory, and /opname", async () => {
       vi.mocked(nextAuthJwt.getToken).mockResolvedValue(
         createMockToken("user-2", "WAREHOUSE_ADMIN")
       );
@@ -195,6 +195,10 @@ describe("Proxy & RBAC Route Protection", () => {
       const req3 = createMockRequest("http://localhost:3000/inventory");
       const res3 = await proxy(req3);
       expect(res3.headers.get("location")).toBeNull();
+
+      const reqOpname = createMockRequest("http://localhost:3000/opname");
+      const resOpname = await proxy(reqOpname);
+      expect(resOpname.headers.get("location")).toBeNull();
     });
 
     it("WAREHOUSE_ADMIN: should redirect from hidden pages (warehouse, categories, pos, users) to /", async () => {
@@ -223,7 +227,7 @@ describe("Proxy & RBAC Route Protection", () => {
       expect(resUsers.headers.get("location")).toBe("http://localhost:3000/");
     });
 
-    it("WAREHOUSE_ADMIN: should allow warehouse, transfer, inventory, category APIs and block users API", async () => {
+    it("WAREHOUSE_ADMIN: should allow warehouse, transfer, inventory, category, and opname APIs and block users API", async () => {
       vi.mocked(nextAuthJwt.getToken).mockResolvedValue(
         createMockToken("user-2", "WAREHOUSE_ADMIN")
       );
@@ -235,6 +239,10 @@ describe("Proxy & RBAC Route Protection", () => {
       const reqCatApi = createMockRequest("http://localhost:3000/api/categories");
       const resCatApi = await proxy(reqCatApi);
       expect(resCatApi.status).toBe(200);
+
+      const reqOpnameApi = createMockRequest("http://localhost:3000/api/opname");
+      const resOpnameApi = await proxy(reqOpnameApi);
+      expect(resOpnameApi.status).toBe(200);
 
       const reqUsersApi = createMockRequest("http://localhost:3000/api/users");
       const resUsersApi = await proxy(reqUsersApi);
@@ -254,11 +262,13 @@ describe("Proxy & RBAC Route Protection", () => {
         "http://localhost:3000/users",
         "http://localhost:3000/categories",
         "http://localhost:3000/inventory",
+        "http://localhost:3000/opname",
         "http://localhost:3000/api/users",
         "http://localhost:3000/api/warehouses",
         "http://localhost:3000/api/categories",
         "http://localhost:3000/api/inventory",
         "http://localhost:3000/api/transfers",
+        "http://localhost:3000/api/opname",
       ];
 
       for (const route of routes) {
