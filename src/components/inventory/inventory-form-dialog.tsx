@@ -27,13 +27,20 @@ import {
   RefreshCwIcon,
   Wand2Icon,
   InfoIcon,
+  ImageIcon,
+  UploadCloudIcon,
+  ZoomInIcon,
+  XIcon,
 } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ProductItem } from "@/services/inventory.service";
 import type { CategoryItem } from "@/services/category.service";
 import { formatRupiah } from "@/components/inventory/inventory-detail-dialog";
 import { CascadingCategorySelect } from "@/components/inventory/cascading-category-select";
+import { compressClientImage } from "@/lib/image-compression";
+import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 
 interface WarehouseOption {
   id: string;
@@ -45,6 +52,9 @@ interface VariantFormRow {
   id?: string;
   variantName: string;
   sku: string;
+  image?: string | null;
+  previewUrl?: string | null;
+  pendingFile?: File | null;
   stock: number | string;
   priceCost: number | string;
   priceSell: number | string;
@@ -56,6 +66,7 @@ interface InventoryFormDialogProps {
   product: ProductItem | null; // null for Create, object for Edit
   categories: CategoryItem[];
   warehouses: WarehouseOption[];
+  userRole?: string | null;
   onSuccess: () => void;
 }
 
@@ -65,9 +76,11 @@ export function InventoryFormDialog({
   product,
   categories,
   warehouses,
+  userRole,
   onSuccess,
 }: InventoryFormDialogProps) {
   const isEditing = Boolean(product);
+  const isSuperAdmin = !userRole || userRole === "SUPER_ADMIN";
 
   const [name, setName] = React.useState("");
   const [categoryId, setCategoryId] = React.useState("");
@@ -76,12 +89,17 @@ export function InventoryFormDialog({
     {
       variantName: "Standard",
       sku: "",
+      image: null,
+      previewUrl: null,
+      pendingFile: null,
       stock: 0,
       priceCost: 0,
       priceSell: 0,
     },
   ]);
 
+  const [compressingIndices, setCompressingIndices] = React.useState<Record<number, boolean>>({});
+  const [zoomImage, setZoomImage] = React.useState<{ src: string; title: string } | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -90,16 +108,21 @@ export function InventoryFormDialog({
     if (product) {
       setName(product.name);
       setCategoryId(product.categoryId);
-      setCategoryId(product.categoryId);
       setVariants(
-        product.variants.map((v) => ({
-          id: v.id,
-          variantName: v.variantName,
-          sku: v.sku,
-          stock: v.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0,
-          priceCost: v.priceCost,
-          priceSell: v.priceSell,
-        }))
+        product.variants.map((v) => {
+          const existingImg = v.image || (v.images && v.images.length > 0 ? v.images[0].image : null) || null;
+          return {
+            id: v.id,
+            variantName: v.variantName,
+            sku: v.sku,
+            image: existingImg,
+            previewUrl: existingImg,
+            pendingFile: null,
+            stock: v.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0,
+            priceCost: v.priceCost,
+            priceSell: v.priceSell,
+          };
+        })
       );
     } else {
       const firstLeafCategory =
@@ -114,6 +137,9 @@ export function InventoryFormDialog({
         {
           variantName: "Standard",
           sku: "",
+          image: null,
+          previewUrl: null,
+          pendingFile: null,
           stock: 0,
           priceCost: 0,
           priceSell: 0,
@@ -121,6 +147,7 @@ export function InventoryFormDialog({
       ]);
     }
     setError(null);
+    setCompressingIndices({});
   }, [product, open, categories, warehouses]);
 
   // Selected Category Helper
@@ -134,44 +161,39 @@ export function InventoryFormDialog({
       (sum, v) => sum + Math.max(0, Number(v.stock) || 0),
       0
     );
+    const totalCostSum = variants.reduce((sum, v) => {
+      const stock = Math.max(0, Number(v.stock) || 0);
+      const cost = Math.max(0, Number(v.priceCost) || 0);
+      return sum + stock * cost;
+    }, 0);
+    const avgCostPrice = totalStock > 0 ? totalCostSum / totalStock : 0;
 
-    if (totalStock > 0) {
-      const totalCost = variants.reduce(
-        (sum, v) =>
-          sum + Math.max(0, Number(v.stock) || 0) * (Number(v.priceCost) || 0),
-        0
-      );
-      const avgCostPrice = Math.round((totalCost / totalStock) * 100) / 100;
-      return { totalStock, avgCostPrice };
-    }
-
-    const avgCostPrice =
-      variants.length > 0
-        ? Math.round(
-            (variants.reduce((sum, v) => sum + (Number(v.priceCost) || 0), 0) /
-              variants.length) *
-              100
-          ) / 100
-        : 0;
-
-    return { totalStock: 0, avgCostPrice };
+    return { totalStock, avgCostPrice };
   }, [variants]);
+
+  // Update variant field
+  const handleVariantChange = (
+    index: number,
+    field: keyof VariantFormRow,
+    value: unknown
+  ) => {
+    setVariants((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
 
   // Add new variant row
   const handleAddVariant = () => {
-    const nextIndex = variants.length + 1;
-    const catCode = selectedCategory?.code || "CAT";
-    const prodCode = name.trim()
-      ? name.trim().slice(0, 3).toUpperCase().replace(/[^A-Z0-9]/g, "X")
-      : "PRD";
-    const varCode = `V0${nextIndex}`;
-    const autoSku = `${catCode}-GEN-${prodCode}-${varCode}`;
-
     setVariants((prev) => [
       ...prev,
       {
-        variantName: `Varian ${nextIndex}`,
-        sku: autoSku,
+        variantName: "",
+        sku: "",
+        image: null,
+        previewUrl: null,
+        pendingFile: null,
         stock: 0,
         priceCost: 0,
         priceSell: 0,
@@ -182,34 +204,26 @@ export function InventoryFormDialog({
   // Remove variant row (cannot remove if only 1 remaining)
   const handleRemoveVariant = (index: number) => {
     if (variants.length <= 1) {
-      toast.error("1 produk wajib memiliki minimal 1 SKU / varian produk");
+      toast.error("1 produk wajib memiliki minimal 1 varian");
       return;
     }
-    setVariants((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  // Update variant field
-  const handleVariantChange = (
-    index: number,
-    field: keyof VariantFormRow,
-    value: string | number
-  ) => {
     setVariants((prev) => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
-      return updated;
+      if (prev[index]?.previewUrl && prev[index].previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(prev[index].previewUrl!);
+      }
+      return prev.filter((_, i) => i !== index);
     });
   };
 
   // Auto-generate SKU helper
   const handleGenerateSku = (index: number) => {
     const catCode = selectedCategory?.code || "CAT";
-    const prodWords = name.trim().split(/\s+/).filter(Boolean);
-    const prodCode =
-      prodWords.length >= 2
-        ? (prodWords[0].slice(0, 2) + prodWords[1].slice(0, 2)).toUpperCase()
-        : name.slice(0, 4).toUpperCase().padEnd(3, "X");
-    const safeProdCode = prodCode.replace(/[^A-Z0-9]/g, "X");
+    const prodName = name || "PROD";
+    const safeProdCode = prodName
+      .trim()
+      .slice(0, 3)
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "X");
 
     const varName = variants[index].variantName || `V0${index + 1}`;
     const safeVarCode = varName
@@ -220,6 +234,66 @@ export function InventoryFormDialog({
 
     const generated = `${catCode}-GEN-${safeProdCode}-${safeVarCode}`;
     handleVariantChange(index, "sku", generated);
+  };
+
+  // Image upload and client-side compression handler
+  const handleImageFileChange = async (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setCompressingIndices((prev) => ({ ...prev, [index]: true }));
+
+      // 1. Client-Side compression & format conversion to WebP (< 512KB)
+      toast.info("Mengompresi gambar ke WebP (<512KB)...");
+      const compressedFile = await compressClientImage(file);
+
+      // 2. Generate immediate local preview (TIDAK langsung diupload ke server agar tidak menyampah jika batal)
+      const localPreviewUrl = URL.createObjectURL(compressedFile);
+
+      setVariants((prev) => {
+        const next = [...prev];
+        if (next[index]?.previewUrl && next[index].previewUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(next[index].previewUrl!);
+        }
+        next[index] = {
+          ...next[index],
+          previewUrl: localPreviewUrl,
+          pendingFile: compressedFile,
+        };
+        return next;
+      });
+
+      toast.success(
+        `Gambar siap (${(compressedFile.size / 1024).toFixed(0)} KB). Foto akan diunggah otomatis saat Anda menyimpan produk.`
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Terjadi kesalahan saat mengompresi gambar"
+      );
+    } finally {
+      setCompressingIndices((prev) => ({ ...prev, [index]: false }));
+      e.target.value = "";
+    }
+  };
+
+  const handleRemoveImage = (index: number) => {
+    setVariants((prev) => {
+      const next = [...prev];
+      if (next[index]?.previewUrl && next[index].previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(next[index].previewUrl!);
+      }
+      next[index] = {
+        ...next[index],
+        previewUrl: null,
+        pendingFile: null,
+        image: null,
+      };
+      return next;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -277,18 +351,49 @@ export function InventoryFormDialog({
     try {
       setLoading(true);
 
+      // Step 1: Upload any pending compressed files only now upon actual form submission
+      const uploadedVariants = await Promise.all(
+        variants.map(async (v, i) => {
+          let finalImageUrl = v.image || null;
+
+          if (v.pendingFile) {
+            toast.info(`Mengunggah foto varian #${i + 1} ke storage...`);
+            const formData = new FormData();
+            formData.append("file", v.pendingFile);
+
+            const uploadRes = await fetch("/api/upload", {
+              method: "POST",
+              body: formData,
+            });
+
+            const uploadData = await uploadRes.json();
+            if (!uploadRes.ok) {
+              throw new Error(
+                uploadData.error || `Gagal mengunggah foto varian "${v.variantName}"`
+              );
+            }
+
+            finalImageUrl = uploadData.url;
+          }
+
+          return {
+            ...(v.id ? { id: v.id } : {}),
+            variantName: v.variantName.trim() || "Standard",
+            sku: v.sku.trim().toUpperCase(),
+            image: finalImageUrl,
+            stock: Number(v.stock) || 0,
+            priceCost: Number(v.priceCost) || 0,
+            priceSell: Number(v.priceSell) || 0,
+          };
+        })
+      );
+
+      // Step 2: Save to inventory database
       const payload = {
         name: trimmedName,
         categoryId,
         ...(isEditing ? {} : { warehouseId }),
-        variants: variants.map((v) => ({
-          ...(v.id ? { id: v.id } : {}),
-          variantName: v.variantName.trim() || "Standard",
-          sku: v.sku.trim().toUpperCase(),
-          stock: Number(v.stock) || 0,
-          priceCost: Number(v.priceCost) || 0,
-          priceSell: Number(v.priceSell) || 0,
-        })),
+        variants: uploadedVariants,
       };
 
       const url = isEditing ? `/api/inventory/${product!.id}` : "/api/inventory";
@@ -309,14 +414,14 @@ export function InventoryFormDialog({
       toast.success(
         isEditing
           ? `Produk "${trimmedName}" berhasil diperbarui`
-          : `Produk "${trimmedName}" berhasil dibuat`
+          : `Produk "${trimmedName}" berhasil dibuat dengan ${variants.length} varian`
       );
 
-      onOpenChange(false);
       onSuccess();
+      onOpenChange(false);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan data"
+        err instanceof Error ? err.message : "Terjadi kesalahan saat menyimpan produk"
       );
     } finally {
       setLoading(false);
@@ -584,7 +689,112 @@ export function InventoryFormDialog({
                         />
                       </div>
                     </div>
-                  </div>
+
+                    {/* Variant Image Upload & Preview */}
+                    <div className="pt-2.5 border-t border-border/50">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          {v.previewUrl || v.image ? (
+                            <div className="relative group/img size-12 rounded-lg overflow-hidden border bg-muted/40 shrink-0">
+                              <Image
+                                src={(v.previewUrl || v.image)!}
+                                alt={v.variantName || "Variant"}
+                                fill
+                                unoptimized
+                                sizes="48px"
+                                className="object-cover"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setZoomImage({
+                                        src: (v.previewUrl || v.image)!,
+                                        title: `${name || "Produk"} - ${v.variantName || "Varian"}`,
+                                      })
+                                    }
+                                    className="p-1 rounded text-white hover:bg-white/20 transition-colors cursor-pointer"
+                                    title="Perbesar gambar"
+                                  >
+                                    <ZoomInIcon className="size-3.5" />
+                                  </button>
+                                  {isSuperAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveImage(index)}
+                                      className="p-1 rounded text-white hover:bg-destructive/80 transition-colors cursor-pointer"
+                                      title="Hapus gambar"
+                                    >
+                                      <XIcon className="size-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="size-12 rounded-lg border border-dashed flex flex-col items-center justify-center text-muted-foreground/50 bg-muted/10 shrink-0">
+                                <ImageIcon className="size-5" />
+                              </div>
+                            )}
+
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs font-medium text-foreground">
+                                  Foto Varian <span className="text-muted-foreground font-normal text-[11px]">(Opsional)</span>
+                                </Label>
+                                {(v.previewUrl || v.image) && (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                                    {v.pendingFile ? "Siap Diunggah" : "Tersimpan"}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                {!isSuperAdmin
+                                  ? "Hanya Super Admin yang dapat mengunggah atau mengubah foto varian."
+                                  : v.previewUrl || v.image
+                                  ? v.pendingFile
+                                    ? "Gambar terkompresi lokal. Akan otomatis diunggah saat formulir disimpan."
+                                    : "Gambar tersimpan di storage. Klik untuk melihat pratinjau atau ganti file."
+                                  : "JPG, PNG, atau WebP. Otomatis dikompresi ke WebP maks 512 KB."}
+                              </p>
+                            </div>
+                          </div>
+
+                          {isSuperAdmin && (
+                            <div>
+                              <input
+                                type="file"
+                                id={`variant-image-${index}`}
+                                accept="image/png, image/jpeg, image/jpg, image/webp"
+                                className="hidden"
+                                disabled={loading || compressingIndices[index]}
+                                onChange={(e) => handleImageFileChange(index, e)}
+                              />
+                              <Label
+                                htmlFor={`variant-image-${index}`}
+                                className={cn(
+                                  "inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium cursor-pointer transition-colors",
+                                  compressingIndices[index]
+                                    ? "opacity-60 cursor-not-allowed bg-muted"
+                                    : "hover:bg-accent hover:text-accent-foreground bg-background"
+                                )}
+                              >
+                                {compressingIndices[index] ? (
+                                  <>
+                                    <RefreshCwIcon className="size-3 animate-spin text-primary" />
+                                    <span>Mengompresi...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UploadCloudIcon className="size-3.5 text-primary" />
+                                    <span>{v.previewUrl || v.image ? "Ganti Foto" : "Unggah Foto"}</span>
+                                  </>
+                                )}
+                              </Label>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                 ))}
               </div>
             </div>
@@ -605,6 +815,17 @@ export function InventoryFormDialog({
             </Button>
           </DialogFooter>
         </form>
+
+        {zoomImage && (
+          <ImageZoomDialog
+            open={Boolean(zoomImage)}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) setZoomImage(null);
+            }}
+            src={zoomImage.src}
+            title={zoomImage.title}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

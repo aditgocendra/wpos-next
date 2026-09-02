@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { inventoryService } from "@/services/inventory.service";
+import { inventoryService, type UpdateVariantInput } from "@/services/inventory.service";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -57,13 +57,24 @@ export async function PUT(req: Request, context: RouteContext) {
     const body = await req.json();
     const { name, categoryId, warehouseId, variants } = body;
 
+    // Hanya Super Admin yang diizinkan memperbarui foto varian
+    const sanitizedVariants: UpdateVariantInput[] | undefined = Array.isArray(variants)
+      ? (variants as UpdateVariantInput[]).map((v) => ({
+          ...v,
+          image:
+            session.user.role === "SUPER_ADMIN"
+              ? v.image
+              : undefined,
+        }))
+      : undefined;
+
     const product = await inventoryService.updateProduct(
       id,
       {
         name,
         categoryId,
         warehouseId,
-        variants,
+        variants: sanitizedVariants,
       },
       session.user.id
     );

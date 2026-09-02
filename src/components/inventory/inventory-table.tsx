@@ -52,7 +52,10 @@ import {
   TrendingUpIcon,
   TagIcon,
   PackagePlusIcon,
+  ImageIcon,
+  ZoomInIcon,
 } from "lucide-react";
+import Image from "next/image";
 import type { ProductItem } from "@/services/inventory.service";
 import type { CategoryItem } from "@/services/category.service";
 import { InventoryFormDialog } from "@/components/inventory/inventory-form-dialog";
@@ -63,6 +66,7 @@ import {
 } from "@/components/inventory/inventory-detail-dialog";
 import { InventoryDeleteDialog } from "@/components/inventory/inventory-delete-dialog";
 import { InventoryAddStockDialog } from "@/components/inventory/inventory-add-stock-dialog";
+import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 import { useCategory } from "@/providers/category-provider";
 
 const pageSizeItems = [
@@ -106,6 +110,8 @@ export function InventoryTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedProductForDelete, setSelectedProductForDelete] =
     React.useState<ProductItem | null>(null);
+
+  const [zoomImage, setZoomImage] = React.useState<{ src: string; title: string } | null>(null);
 
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
@@ -224,6 +230,11 @@ export function InventoryTable() {
         cell: ({ row }) => {
           const prod = row.original;
           const isExp = row.getIsExpanded();
+          const prodImg =
+            prod.image ||
+            prod.variants.find((v) => v.image)?.image ||
+            null;
+
           return (
             <div className="flex items-center gap-2.5">
               <Button
@@ -245,9 +256,33 @@ export function InventoryTable() {
                 />
               </Button>
 
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <BoxesIcon className="size-4" />
-              </div>
+              {prodImg ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setZoomImage({ src: prodImg, title: prod.name });
+                  }}
+                  className="relative group/img size-9 shrink-0 rounded-lg overflow-hidden border bg-muted hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+                  title="Klik untuk memperbesar foto"
+                >
+                  <Image
+                    src={prodImg}
+                    alt={prod.name}
+                    fill
+                    unoptimized
+                    sizes="36px"
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomInIcon className="size-3.5 text-white" />
+                  </div>
+                </button>
+              ) : (
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <BoxesIcon className="size-4" />
+                </div>
+              )}
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -658,51 +693,97 @@ export function InventoryTable() {
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                            {row.original.variants.map((variant) => (
-                              <div
-                                key={variant.id}
-                                className="rounded-lg border bg-card p-3 shadow-2xs space-y-1.5"
-                              >
-                                <div className="flex items-center justify-between gap-1">
-                                  <span className="font-semibold text-xs text-foreground truncate">
-                                    {variant.variantName}
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className="font-mono text-[10px] font-bold px-1.5 py-0 bg-primary/5 text-primary border-primary/20"
-                                  >
-                                    {variant.sku}
-                                  </Badge>
-                                </div>
+                            {row.original.variants.map((variant) => {
+                              const variantImg =
+                                variant.image ||
+                                (variant.images && variant.images.length > 0
+                                  ? variant.images[0].image
+                                  : null);
 
-                                <div className="grid grid-cols-3 gap-1 text-[11px] pt-1 border-t">
-                                  <div>
-                                    <p className="text-muted-foreground text-[10px]">
-                                      Stok
-                                    </p>
-                                    <p className="font-bold text-foreground">
-                                      {variant.warehouseStocks?.reduce((sum, s) => sum + s.stock, 0) || 0}
-                                    </p>
+                              return (
+                                <div
+                                  key={variant.id}
+                                  className="rounded-lg border bg-card p-3 shadow-2xs space-y-2"
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    {variantImg ? (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setZoomImage({
+                                            src: variantImg,
+                                            title: `${row.original.name} - ${variant.variantName}`,
+                                          });
+                                        }}
+                                        className="relative group/img size-9 shrink-0 rounded-md overflow-hidden border bg-muted hover:ring-2 hover:ring-primary transition-all cursor-pointer"
+                                        title="Klik untuk memperbesar foto"
+                                      >
+                                        <Image
+                                          src={variantImg}
+                                          alt={variant.variantName}
+                                          fill
+                                          unoptimized
+                                          sizes="36px"
+                                          className="object-cover"
+                                        />
+                                        <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                          <ZoomInIcon className="size-3 text-white" />
+                                        </div>
+                                      </button>
+                                    ) : (
+                                      <div className="size-9 shrink-0 rounded-md border border-dashed flex items-center justify-center text-muted-foreground/40 bg-muted/10">
+                                        <ImageIcon className="size-4" />
+                                      </div>
+                                    )}
+
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="font-semibold text-xs text-foreground truncate">
+                                          {variant.variantName}
+                                        </span>
+                                        <Badge
+                                          variant="outline"
+                                          className="font-mono text-[10px] font-bold px-1.5 py-0 bg-primary/5 text-primary border-primary/20"
+                                        >
+                                          {variant.sku}
+                                        </Badge>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className="text-muted-foreground text-[10px]">
-                                      Modal (HPP)
-                                    </p>
-                                    <p className="font-medium text-foreground">
-                                      {formatRupiah(variant.priceCost)}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-muted-foreground text-[10px]">
-                                      Harga Jual
-                                    </p>
-                                    <p className="font-bold text-primary">
-                                      {formatRupiah(variant.priceSell)}
-                                    </p>
+
+                                  <div className="grid grid-cols-3 gap-1 text-[11px] pt-1.5 border-t">
+                                    <div>
+                                      <p className="text-muted-foreground text-[10px]">
+                                        Stok
+                                      </p>
+                                      <p className="font-bold text-foreground">
+                                        {variant.warehouseStocks?.reduce(
+                                          (sum, s) => sum + s.stock,
+                                          0
+                                        ) || 0}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground text-[10px]">
+                                        Modal (HPP)
+                                      </p>
+                                      <p className="font-medium text-foreground">
+                                        {formatRupiah(variant.priceCost)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground text-[10px]">
+                                        Harga Jual
+                                      </p>
+                                      <p className="font-bold text-primary">
+                                        {formatRupiah(variant.priceSell)}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </TableCell>
@@ -816,6 +897,7 @@ export function InventoryTable() {
         product={selectedProductForEdit}
         categories={categories}
         warehouses={warehouses}
+        userRole={currentUserRole}
         onSuccess={fetchData}
       />
 
@@ -843,6 +925,17 @@ export function InventoryTable() {
         product={selectedProductForDelete}
         onSuccess={fetchData}
       />
+
+      {zoomImage && (
+        <ImageZoomDialog
+          open={Boolean(zoomImage)}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setZoomImage(null);
+          }}
+          src={zoomImage.src}
+          title={zoomImage.title}
+        />
+      )}
     </div>
   );
 }

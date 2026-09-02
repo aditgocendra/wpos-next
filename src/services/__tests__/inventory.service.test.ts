@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { InventoryService } from "../inventory.service";
+import { deleteStorageFiles } from "@/lib/supabase";
+
+vi.mock("@/lib/supabase", () => ({
+  deleteStorageFiles: vi.fn().mockResolvedValue(undefined),
+  BUCKET_NAME: "product",
+}));
 
 describe("InventoryService Unit Tests", () => {
   let inventoryService: InventoryService;
@@ -21,6 +27,11 @@ describe("InventoryService Unit Tests", () => {
     };
     productVariantStock: {
       upsert: ReturnType<typeof vi.fn>;
+      deleteMany: ReturnType<typeof vi.fn>;
+    };
+    productImage: {
+      findMany: ReturnType<typeof vi.fn>;
+      create: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
     };
     category: {
@@ -135,6 +146,11 @@ describe("InventoryService Unit Tests", () => {
         upsert: vi.fn(),
         deleteMany: vi.fn(),
       },
+      productImage: {
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn(),
+        deleteMany: vi.fn(),
+      },
       category: {
         findUnique: vi.fn(),
       },
@@ -147,6 +163,7 @@ describe("InventoryService Unit Tests", () => {
             product: mockPrisma.product,
             productVariant: mockPrisma.productVariant,
             productVariantStock: mockPrisma.productVariantStock,
+            productImage: mockPrisma.productImage,
           });
         }
         return cb;
@@ -547,6 +564,96 @@ describe("InventoryService Unit Tests", () => {
       expect(result.data).toHaveLength(1);
       expect(result.meta.page).toBe(1);
       expect(result.meta.total).toBe(1);
+    });
+  });
+
+  describe("Product Variant Image Support", () => {
+    it("should save productImage when variant has image during createProduct", async () => {
+      mockPrisma.category.findUnique.mockResolvedValue(sampleCategory);
+      mockPrisma.warehouse.findUnique.mockResolvedValue(sampleWarehouse);
+      mockPrisma.productVariant.findMany.mockResolvedValue([]);
+      mockPrisma.product.create.mockResolvedValue({ id: "prod-img-1" });
+      mockPrisma.productVariant.create.mockResolvedValue({ id: "var-img-1" });
+      mockPrisma.productImage.create.mockResolvedValue({ id: "img-1" });
+      mockPrisma.product.findUnique.mockResolvedValue({
+        ...sampleProduct,
+        id: "prod-img-1",
+        variants: [
+          {
+            ...sampleProduct.variants[0],
+            id: "var-img-1",
+            images: [{ id: "img-1", image: "https://example.com/test.webp" }],
+          },
+        ],
+      });
+
+      const product = await inventoryService.createProduct(
+        {
+          name: "Product with Image",
+          categoryId: "cat-ear",
+          warehouseId: "wh-main",
+          variants: [
+            {
+              variantName: "Black WebP",
+              sku: "EAR-SON-WF1-BLK",
+              image: "https://example.com/test.webp",
+              stock: 10,
+              priceCost: 1000,
+              priceSell: 2000,
+            },
+          ],
+        },
+        "usr-admin"
+      );
+
+      expect(mockPrisma.productImage.create).toHaveBeenCalledWith({
+        data: {
+          productId: "prod-img-1",
+          variantId: "var-img-1",
+          image: "https://example.com/test.webp",
+        },
+      });
+      expect(product.variants[0].image).toBe("https://example.com/test.webp");
+    });
+
+    it("should call deleteStorageFiles when a variant image is replaced during updateProduct", async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(sampleProduct);
+      mockPrisma.productVariant.findMany.mockResolvedValue([]);
+      mockPrisma.productImage.findMany.mockResolvedValue([
+        { id: "img-old", productId: "prod-1", variantId: "var-1", image: "https://example.com/old.webp" },
+      ]);
+      mockPrisma.product.update.mockResolvedValue(sampleProduct);
+
+      await inventoryService.updateProduct(
+        "prod-1",
+        {
+          variants: [
+            {
+              id: "var-1",
+              variantName: "Black",
+              sku: "EAR-SON-WF1-BLK",
+              image: "https://example.com/new.webp",
+              priceSell: 4200000,
+              priceCost: 3000000,
+            },
+          ],
+        },
+        "usr-admin"
+      );
+
+      expect(deleteStorageFiles).toHaveBeenCalledWith(["https://example.com/old.webp"]);
+    });
+
+    it("should call deleteStorageFiles when product is deleted", async () => {
+      mockPrisma.product.findUnique.mockResolvedValue(sampleProduct);
+      mockPrisma.productImage.findMany.mockResolvedValue([
+        { id: "img-1", image: "https://example.com/prod1-img.webp" },
+      ]);
+      mockPrisma.product.delete.mockResolvedValue(sampleProduct);
+
+      await inventoryService.deleteProduct("prod-1");
+
+      expect(deleteStorageFiles).toHaveBeenCalledWith(["https://example.com/prod1-img.webp"]);
     });
   });
 });

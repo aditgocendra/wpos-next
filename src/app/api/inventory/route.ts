@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { inventoryService } from "@/services/inventory.service";
+import { inventoryService, type CreateVariantInput } from "@/services/inventory.service";
 
 export async function GET(req: Request) {
   try {
@@ -93,12 +93,18 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hanya Super Admin yang diizinkan menambahkan atau mengubah foto varian
+    const sanitizedVariants: CreateVariantInput[] = (variants as CreateVariantInput[]).map((v) => ({
+      ...v,
+      image: session.user.role === "SUPER_ADMIN" ? v.image : undefined,
+    }));
+
     const product = await inventoryService.createProduct(
       {
         name,
         categoryId,
         warehouseId,
-        variants,
+        variants: sanitizedVariants,
       },
       session.user.id
     );
