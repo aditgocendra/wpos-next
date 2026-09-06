@@ -110,7 +110,7 @@ export function InventoryFormDialog({
       setCategoryId(product.categoryId);
       setVariants(
         product.variants.map((v) => {
-          const existingImg = v.image || (v.images && v.images.length > 0 ? v.images[0].image : null) || null;
+          const existingImg = v.image || null;
           return {
             id: v.id,
             variantName: v.variantName,

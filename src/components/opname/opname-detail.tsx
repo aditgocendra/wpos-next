@@ -66,7 +66,7 @@ interface OpnameDetailData {
       sku: string;
       priceCost: number;
       priceSell: number;
-      images?: Array<{ image: string }>;
+      image?: string | null;
     };
     systemStock: number;
     actualStock: number;
@@ -393,10 +393,7 @@ export function OpnameDetail({ id }: OpnameDetailProps) {
           </TableHeader>
           <TableBody>
             {data.items.map((item, idx) => {
-              const variantImg =
-                item.variant?.images && item.variant.images.length > 0
-                  ? item.variant.images[0].image
-                  : null;
+              const variantImg = item.variant?.image || null;
               const cost = item.variant?.priceCost || 0;
               const diffValue = item.difference * cost;
 

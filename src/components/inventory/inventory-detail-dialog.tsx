@@ -169,11 +169,7 @@ export function InventoryDetailDialog({
 
               <div className="space-y-2">
                 {product.variants.map((variant, idx) => {
-                  const variantImg =
-                    variant.image ||
-                    (variant.images && variant.images.length > 0
-                      ? variant.images[0].image
-                      : null);
+                  const variantImg = variant.image || null;
 
                   return (
                     <div

@@ -29,11 +29,6 @@ describe("InventoryService Unit Tests", () => {
       upsert: ReturnType<typeof vi.fn>;
       deleteMany: ReturnType<typeof vi.fn>;
     };
-    productImage: {
-      findMany: ReturnType<typeof vi.fn>;
-      create: ReturnType<typeof vi.fn>;
-      deleteMany: ReturnType<typeof vi.fn>;
-    };
     category: {
       findUnique: ReturnType<typeof vi.fn>;
     };
@@ -136,7 +131,7 @@ describe("InventoryService Unit Tests", () => {
         count: vi.fn(),
       },
       productVariant: {
-        findMany: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
@@ -144,11 +139,6 @@ describe("InventoryService Unit Tests", () => {
       },
       productVariantStock: {
         upsert: vi.fn(),
-        deleteMany: vi.fn(),
-      },
-      productImage: {
-        findMany: vi.fn().mockResolvedValue([]),
-        create: vi.fn(),
         deleteMany: vi.fn(),
       },
       category: {
@@ -163,7 +153,6 @@ describe("InventoryService Unit Tests", () => {
             product: mockPrisma.product,
             productVariant: mockPrisma.productVariant,
             productVariantStock: mockPrisma.productVariantStock,
-            productImage: mockPrisma.productImage,
           });
         }
         return cb;
@@ -568,13 +557,12 @@ describe("InventoryService Unit Tests", () => {
   });
 
   describe("Product Variant Image Support", () => {
-    it("should save productImage when variant has image during createProduct", async () => {
+    it("should save image directly on productVariant during createProduct", async () => {
       mockPrisma.category.findUnique.mockResolvedValue(sampleCategory);
       mockPrisma.warehouse.findUnique.mockResolvedValue(sampleWarehouse);
       mockPrisma.productVariant.findMany.mockResolvedValue([]);
       mockPrisma.product.create.mockResolvedValue({ id: "prod-img-1" });
       mockPrisma.productVariant.create.mockResolvedValue({ id: "var-img-1" });
-      mockPrisma.productImage.create.mockResolvedValue({ id: "img-1" });
       mockPrisma.product.findUnique.mockResolvedValue({
         ...sampleProduct,
         id: "prod-img-1",
@@ -582,7 +570,7 @@ describe("InventoryService Unit Tests", () => {
           {
             ...sampleProduct.variants[0],
             id: "var-img-1",
-            images: [{ id: "img-1", image: "https://example.com/test.webp" }],
+            image: "https://example.com/test.webp",
           },
         ],
       });
@@ -606,23 +594,31 @@ describe("InventoryService Unit Tests", () => {
         "usr-admin"
       );
 
-      expect(mockPrisma.productImage.create).toHaveBeenCalledWith({
-        data: {
+      expect(mockPrisma.productVariant.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
           productId: "prod-img-1",
-          variantId: "var-img-1",
+          variantName: "Black WebP",
+          sku: "EAR-SON-WF1-BLK",
           image: "https://example.com/test.webp",
-        },
+        }),
       });
       expect(product.variants[0].image).toBe("https://example.com/test.webp");
     });
 
     it("should call deleteStorageFiles when a variant image is replaced during updateProduct", async () => {
-      mockPrisma.product.findUnique.mockResolvedValue(sampleProduct);
+      const productWithOldImg = {
+        ...sampleProduct,
+        variants: [
+          {
+            ...sampleProduct.variants[0],
+            id: "var-1",
+            image: "https://example.com/old.webp",
+          },
+        ],
+      };
+      mockPrisma.product.findUnique.mockResolvedValue(productWithOldImg);
       mockPrisma.productVariant.findMany.mockResolvedValue([]);
-      mockPrisma.productImage.findMany.mockResolvedValue([
-        { id: "img-old", productId: "prod-1", variantId: "var-1", image: "https://example.com/old.webp" },
-      ]);
-      mockPrisma.product.update.mockResolvedValue(sampleProduct);
+      mockPrisma.product.update.mockResolvedValue(productWithOldImg);
 
       await inventoryService.updateProduct(
         "prod-1",
@@ -646,8 +642,8 @@ describe("InventoryService Unit Tests", () => {
 
     it("should call deleteStorageFiles when product is deleted", async () => {
       mockPrisma.product.findUnique.mockResolvedValue(sampleProduct);
-      mockPrisma.productImage.findMany.mockResolvedValue([
-        { id: "img-1", image: "https://example.com/prod1-img.webp" },
+      mockPrisma.productVariant.findMany.mockResolvedValue([
+        { id: "var-1", image: "https://example.com/prod1-img.webp" },
       ]);
       mockPrisma.product.delete.mockResolvedValue(sampleProduct);
 

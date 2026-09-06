@@ -154,7 +154,7 @@ export class OpnameService {
                 sku: true,
                 priceCost: true,
                 priceSell: true,
-                images: { select: { image: true }, take: 1 },
+                image: true,
               },
             },
           },

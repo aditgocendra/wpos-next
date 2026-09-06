@@ -13,20 +13,12 @@ export interface ProductVariantStockItem {
   stock: number;
 }
 
-export interface ProductImageItem {
-  id: string;
-  image: string;
-  productId: string;
-  variantId?: string | null;
-}
-
 export interface ProductVariantItem {
   id: string;
   productId: string;
   variantName: string;
   sku: string;
   image?: string | null;
-  images?: ProductImageItem[];
   stock?: number;
   priceSell: number;
   priceCost: number;
@@ -194,7 +186,6 @@ export class InventoryService {
           variants: {
             orderBy: { createdAt: "asc" },
             include: {
-              images: true,
               warehouseStocks: {
                 include: {
                   warehouse: { select: { id: true, name: true, code: true } },
@@ -225,22 +216,13 @@ export class InventoryService {
         
         productTotalStock += variantStock;
         totalCostSum += (variantStock * v.priceCost);
-        
-        const variantImages: ProductImageItem[] = (v.images || []).map((img) => ({
-          id: img.id,
-          image: img.image,
-          productId: img.productId,
-          variantId: img.variantId,
-        }));
-        const variantImage = variantImages.length > 0 ? variantImages[0].image : null;
 
         return {
           id: v.id,
           productId: v.productId,
           variantName: v.variantName,
           sku: v.sku,
-          image: variantImage,
-          images: variantImages,
+          image: v.image || null,
           stock: variantStock,
           priceSell: v.priceSell,
           priceCost: v.priceCost,
@@ -253,7 +235,7 @@ export class InventoryService {
       });
 
       const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
-      const primaryImage = mappedVariants.find((v) => v.image)?.image || null;
+      const primaryImage = mappedVariants[0]?.image || null;
 
       return {
         id: p.id,
@@ -297,7 +279,6 @@ export class InventoryService {
         variants: {
           orderBy: { createdAt: "asc" },
           include: {
-            images: true,
             warehouseStocks: {
               include: {
                 warehouse: { select: { id: true, name: true, code: true } },
@@ -323,22 +304,13 @@ export class InventoryService {
       const variantStock = (v.warehouseStocks || []).reduce((sum, s) => sum + s.stock, 0);
       productTotalStock += variantStock;
       totalCostSum += (variantStock * v.priceCost);
-      
-      const variantImages: ProductImageItem[] = (v.images || []).map((img) => ({
-        id: img.id,
-        image: img.image,
-        productId: img.productId,
-        variantId: img.variantId,
-      }));
-      const variantImage = variantImages.length > 0 ? variantImages[0].image : null;
 
       return {
         id: v.id,
         productId: v.productId,
         variantName: v.variantName,
         sku: v.sku,
-        image: variantImage,
-        images: variantImages,
+        image: v.image || null,
         stock: variantStock,
         priceSell: v.priceSell,
         priceCost: v.priceCost,
@@ -351,7 +323,7 @@ export class InventoryService {
     });
 
     const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
-    const primaryImage = mappedVariants.find((v) => v.image)?.image || null;
+    const primaryImage = mappedVariants[0]?.image || null;
 
     return {
       id: product.id,
@@ -459,11 +431,12 @@ export class InventoryService {
       });
 
       for (const v of sanitizedVariants) {
-        const variant = await tx.productVariant.create({
+        await tx.productVariant.create({
           data: {
             productId: product.id,
             variantName: v.variantName,
             sku: v.sku,
+            image: v.image || null,
             priceSell: v.priceSell,
             priceCost: v.priceCost,
             createdById: userId,
@@ -475,16 +448,6 @@ export class InventoryService {
             },
           },
         });
-
-        if (v.image) {
-          await tx.productImage.create({
-            data: {
-              productId: product.id,
-              variantId: variant.id,
-              image: v.image,
-            },
-          });
-        }
       }
 
       return product;
@@ -593,28 +556,18 @@ export class InventoryService {
         .map((v) => v.id)
         .filter((vid): vid is string => Boolean(vid));
 
-      // Ambil seluruh foto varian yang ada saat ini untuk mendeteksi file yang diganti / dihapus
-      const existingProductImages = await this.db.productImage.findMany({
-        where: { productId: id },
-      });
-
+      const existingVariants = existing.variants;
       const imagesToDeleteFromStorage: string[] = [];
 
       await this.db.$transaction(async (tx) => {
         // Deteksi varian yang dihapus dan kumpulkan fotonya
-        const deletedVariants = await tx.productVariant.findMany({
-          where: {
-            productId: id,
-            id: { notIn: inputVariantIds },
-          },
-          include: { images: true },
-        });
+        const deletedVariants = existingVariants.filter(
+          (ev) => !inputVariantIds.includes(ev.id)
+        );
 
         for (const dv of deletedVariants) {
-          if (dv.images && dv.images.length > 0) {
-            for (const img of dv.images) {
-              imagesToDeleteFromStorage.push(img.image);
-            }
+          if (dv.image) {
+            imagesToDeleteFromStorage.push(dv.image);
           }
         }
 
@@ -626,13 +579,18 @@ export class InventoryService {
         });
 
         for (const v of sanitizedVariants) {
-          let variantId = v.id;
           if (v.id) {
+            const currentVariant = existingVariants.find((ev) => ev.id === v.id);
+            if (v.image !== undefined && currentVariant?.image && currentVariant.image !== v.image) {
+              imagesToDeleteFromStorage.push(currentVariant.image);
+            }
+
             await tx.productVariant.update({
               where: { id: v.id },
               data: {
                 variantName: v.variantName,
                 sku: v.sku,
+                ...(v.image !== undefined ? { image: v.image } : {}),
                 priceSell: v.priceSell,
                 priceCost: v.priceCost,
                 updatedById: userId,
@@ -652,11 +610,12 @@ export class InventoryService {
               });
             }
           } else {
-            const created = await tx.productVariant.create({
+            await tx.productVariant.create({
               data: {
                 productId: id,
                 variantName: v.variantName,
                 sku: v.sku,
+                image: v.image || null,
                 priceSell: v.priceSell,
                 priceCost: v.priceCost,
                 createdById: userId,
@@ -665,32 +624,6 @@ export class InventoryService {
                 } : undefined
               },
             });
-            variantId = created.id;
-          }
-
-          if (variantId && v.image !== undefined) {
-            // Cek apakah gambar varian ini diubah atau dihapus dari nilai sebelumnya
-            const previousImages = existingProductImages.filter(
-              (img) => img.variantId === variantId
-            );
-            for (const prevImg of previousImages) {
-              if (prevImg.image !== v.image) {
-                imagesToDeleteFromStorage.push(prevImg.image);
-              }
-            }
-
-            await tx.productImage.deleteMany({
-              where: { variantId },
-            });
-            if (v.image) {
-              await tx.productImage.create({
-                data: {
-                  productId: id,
-                  variantId,
-                  image: v.image,
-                },
-              });
-            }
           }
         }
 
@@ -800,7 +733,7 @@ export class InventoryService {
       throw new Error("Gagal Menghapus: Produk ini sudah pernah dimutasi (Stock Transfer). Sistem melarang penghapusan untuk menjaga integritas riwayat pergerakan barang.");
     }
 
-    const productImages = await this.db.productImage.findMany({
+    const variants = await this.db.productVariant.findMany({
       where: { productId: id },
       select: { image: true },
     });
@@ -809,8 +742,11 @@ export class InventoryService {
       where: { id },
     });
 
-    if (productImages.length > 0) {
-      const urls = productImages.map((pi) => pi.image);
+    const urls = (variants || [])
+      .map((v) => v.image)
+      .filter((img): img is string => Boolean(img));
+
+    if (urls.length > 0) {
       await deleteStorageFiles(urls);
     }
 
