@@ -26,14 +26,18 @@ interface WarehouseDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   warehouse: WarehouseItem | null;
+  isSuperAdmin?: boolean;
   onEdit?: (warehouse: WarehouseItem) => void;
+  onBulkCopy?: (warehouse: WarehouseItem) => void;
 }
 
 export function WarehouseDetailDialog({
   open,
   onOpenChange,
   warehouse,
+  isSuperAdmin = false,
   onEdit,
+  onBulkCopy,
 }: WarehouseDetailDialogProps) {
   if (!warehouse) return null;
 
@@ -160,19 +164,37 @@ export function WarehouseDetailDialog({
           </div>
         </div>
 
-        <DialogFooter className="pt-2">
-          {onEdit && (
-            <Button
-              variant="outline"
-              onClick={() => {
-                onOpenChange(false);
-                onEdit(warehouse);
-              }}
-            >
-              Edit Gudang
-            </Button>
-          )}
-          <Button onClick={() => onOpenChange(false)}>Tutup</Button>
+        <DialogFooter className="pt-2 flex items-center justify-between sm:justify-between w-full">
+          <div>
+            {onBulkCopy && isSuperAdmin && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  onOpenChange(false);
+                  onBulkCopy(warehouse);
+                }}
+              >
+                Salin Produk Antar Gudang
+              </Button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onOpenChange(false);
+                  onEdit(warehouse);
+                }}
+              >
+                Edit Gudang
+              </Button>
+            )}
+            <Button size="sm" onClick={() => onOpenChange(false)}>Tutup</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

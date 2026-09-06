@@ -46,6 +46,18 @@ export interface UpdateWarehouseInput {
   adminUserId?: string | null;
 }
 
+export interface BulkCopyProductsInput {
+  sourceWarehouseId: string;
+  copyStockQuantity?: boolean;
+  variantIds?: string[];
+}
+
+export interface BulkCopyProductsResult {
+  copiedCount: number;
+  skippedCount: number;
+  totalSourceVariants: number;
+}
+
 export class WarehouseService {
   constructor(private db = defaultPrisma) {}
 
@@ -330,6 +342,99 @@ export class WarehouseService {
     });
 
     return { success: true };
+  }
+
+  async bulkCopyProducts(
+    targetWarehouseId: string,
+    input: BulkCopyProductsInput
+  ): Promise<BulkCopyProductsResult> {
+    const { sourceWarehouseId, copyStockQuantity = false, variantIds } = input;
+
+    if (!sourceWarehouseId) {
+      throw new Error("Gudang sumber (sourceWarehouseId) wajib dipilih.");
+    }
+
+    if (sourceWarehouseId === targetWarehouseId) {
+      throw new Error("Gudang sumber dan gudang tujuan tidak boleh sama.");
+    }
+
+    // Verify source and target warehouses exist
+    const [sourceWh, targetWh] = await Promise.all([
+      this.db.warehouse.findUnique({ where: { id: sourceWarehouseId } }),
+      this.db.warehouse.findUnique({ where: { id: targetWarehouseId } }),
+    ]);
+
+    if (!sourceWh) {
+      throw new Error("Gudang sumber tidak ditemukan.");
+    }
+
+    if (!targetWh) {
+      throw new Error("Gudang tujuan tidak ditemukan.");
+    }
+
+    // Fetch product variant stocks from source warehouse
+    const sourceWhere: {
+      warehouseId: string;
+      variantId?: { in: string[] };
+    } = { warehouseId: sourceWarehouseId };
+
+    if (variantIds && variantIds.length > 0) {
+      sourceWhere.variantId = { in: variantIds };
+    }
+
+    const sourceStocks = await this.db.productVariantStock.findMany({
+      where: sourceWhere,
+      select: {
+        variantId: true,
+        stock: true,
+      },
+    });
+
+    const totalSourceVariants = sourceStocks.length;
+
+    if (totalSourceVariants === 0) {
+      return {
+        copiedCount: 0,
+        skippedCount: 0,
+        totalSourceVariants: 0,
+      };
+    }
+
+    // Check which variants already exist in the target warehouse
+    const sourceVariantIds = sourceStocks.map((s) => s.variantId);
+    const existingInTarget = await this.db.productVariantStock.findMany({
+      where: {
+        warehouseId: targetWarehouseId,
+        variantId: { in: sourceVariantIds },
+      },
+      select: {
+        variantId: true,
+      },
+    });
+
+    const existingVariantIdSet = new Set(existingInTarget.map((e) => e.variantId));
+
+    // Filter to only new variants
+    const newItemsToCreate = sourceStocks
+      .filter((item) => !existingVariantIdSet.has(item.variantId))
+      .map((item) => ({
+        warehouseId: targetWarehouseId,
+        variantId: item.variantId,
+        stock: copyStockQuantity ? Math.max(0, item.stock) : 0,
+      }));
+
+    if (newItemsToCreate.length > 0) {
+      await this.db.productVariantStock.createMany({
+        data: newItemsToCreate,
+        skipDuplicates: true,
+      });
+    }
+
+    return {
+      copiedCount: newItemsToCreate.length,
+      skippedCount: existingVariantIdSet.size,
+      totalSourceVariants,
+    };
   }
 }
 
