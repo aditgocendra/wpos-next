@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSession } from "next-auth/react";
 import {
   ColumnDef,
   PaginationState,
@@ -52,11 +53,13 @@ import {
   PackageIcon,
   ShieldCheckIcon,
   SearchIcon,
+  CopyIcon,
 } from "lucide-react";
 import type { WarehouseItem, WarehouseAdminUser } from "@/services/warehouse.service";
 import { WarehouseFormDialog } from "@/components/warehouse/warehouse-form-dialog";
 import { WarehouseDetailDialog } from "@/components/warehouse/warehouse-detail-dialog";
 import { WarehouseDeleteDialog } from "@/components/warehouse/warehouse-delete-dialog";
+import { WarehouseBulkCopyDialog } from "@/components/warehouse/warehouse-bulk-copy-dialog";
 
 export function formatDateTime(dateInput: string | Date | undefined): string {
   if (!dateInput) return "-";
@@ -80,6 +83,9 @@ const pageSizeItems = [
 ];
 
 export function WarehouseTable() {
+  const { data: session } = useSession();
+  const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+
   const [warehouses, setWarehouses] = React.useState<WarehouseItem[]>([]);
   const [adminUsers, setAdminUsers] = React.useState<WarehouseAdminUser[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -97,6 +103,10 @@ export function WarehouseTable() {
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedWarehouseForDelete, setSelectedWarehouseForDelete] =
+    React.useState<WarehouseItem | null>(null);
+
+  const [bulkCopyDialogOpen, setBulkCopyDialogOpen] = React.useState(false);
+  const [selectedWarehouseForBulkCopy, setSelectedWarehouseForBulkCopy] =
     React.useState<WarehouseItem | null>(null);
 
   const [pagination, setPagination] = React.useState<PaginationState>({
@@ -268,6 +278,21 @@ export function WarehouseTable() {
                 <EyeIcon className="size-4" />
                 <span className="sr-only">Detail</span>
               </Button>
+              {isSuperAdmin && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-muted-foreground hover:text-primary"
+                  title="Salin Produk Antar Gudang"
+                  onClick={() => {
+                    setSelectedWarehouseForBulkCopy(wh);
+                    setBulkCopyDialogOpen(true);
+                  }}
+                >
+                  <CopyIcon className="size-4" />
+                  <span className="sr-only">Salin Produk</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -299,7 +324,7 @@ export function WarehouseTable() {
         },
       },
     ],
-    []
+    [isSuperAdmin]
   );
 
   const table = useReactTable({
@@ -340,6 +365,22 @@ export function WarehouseTable() {
           >
             <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
           </Button>
+
+          {isSuperAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedWarehouseForBulkCopy(null);
+                setBulkCopyDialogOpen(true);
+              }}
+              disabled={loading || warehouses.length < 2}
+              className="gap-2 shadow-xs"
+              title="Salin ketersediaan produk antar gudang"
+            >
+              <CopyIcon className="size-4 text-primary" />
+              <span>Salin Antar Gudang</span>
+            </Button>
+          )}
 
           <Button
             onClick={() => {
@@ -567,9 +608,14 @@ export function WarehouseTable() {
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         warehouse={selectedWarehouseForDetail}
+        isSuperAdmin={isSuperAdmin}
         onEdit={(wh) => {
           setSelectedWarehouseForEdit(wh);
           setFormDialogOpen(true);
+        }}
+        onBulkCopy={(wh) => {
+          setSelectedWarehouseForBulkCopy(wh);
+          setBulkCopyDialogOpen(true);
         }}
       />
 
@@ -579,6 +625,16 @@ export function WarehouseTable() {
         warehouse={selectedWarehouseForDelete}
         onSuccess={fetchWarehouses}
       />
+
+      {isSuperAdmin && (
+        <WarehouseBulkCopyDialog
+          open={bulkCopyDialogOpen}
+          onOpenChange={setBulkCopyDialogOpen}
+          targetWarehouse={selectedWarehouseForBulkCopy}
+          warehouses={warehouses}
+          onSuccess={fetchWarehouses}
+        />
+      )}
     </div>
   );
 }

@@ -18,6 +18,10 @@ describe("WarehouseService Unit Tests", () => {
       update: ReturnType<typeof vi.fn>;
       updateMany: ReturnType<typeof vi.fn>;
     };
+    productVariantStock: {
+      findMany: ReturnType<typeof vi.fn>;
+      createMany: ReturnType<typeof vi.fn>;
+    };
   };
 
   const sampleAdminUser = {
@@ -52,6 +56,10 @@ describe("WarehouseService Unit Tests", () => {
         findUnique: vi.fn(),
         update: vi.fn(),
         updateMany: vi.fn(),
+      },
+      productVariantStock: {
+        findMany: vi.fn(),
+        createMany: vi.fn(),
       },
     };
     warehouseService = new WarehouseService(
@@ -301,6 +309,143 @@ describe("WarehouseService Unit Tests", () => {
 
       await expect(warehouseService.deleteWarehouse("wh-999")).rejects.toThrow(
         "Warehouse not found"
+      );
+    });
+  });
+
+  describe("bulkCopyProducts", () => {
+    it("should throw error if sourceWarehouseId is empty or same as targetWarehouseId", async () => {
+      await expect(
+        warehouseService.bulkCopyProducts("wh-target", {
+          sourceWarehouseId: "",
+        })
+      ).rejects.toThrow("Gudang sumber (sourceWarehouseId) wajib dipilih.");
+
+      await expect(
+        warehouseService.bulkCopyProducts("wh-same", {
+          sourceWarehouseId: "wh-same",
+        })
+      ).rejects.toThrow("Gudang sumber dan gudang tujuan tidak boleh sama.");
+    });
+
+    it("should throw error if source or target warehouse does not exist", async () => {
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(null) // sourceWh
+        .mockResolvedValueOnce(sampleWarehouse); // targetWh
+
+      await expect(
+        warehouseService.bulkCopyProducts("wh-target", {
+          sourceWarehouseId: "wh-not-found",
+        })
+      ).rejects.toThrow("Gudang sumber tidak ditemukan.");
+
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(sampleWarehouse) // sourceWh
+        .mockResolvedValueOnce(null); // targetWh
+
+      await expect(
+        warehouseService.bulkCopyProducts("wh-not-found", {
+          sourceWarehouseId: "wh-1",
+        })
+      ).rejects.toThrow("Gudang tujuan tidak ditemukan.");
+    });
+
+    it("should return zero counts if source warehouse has no variants", async () => {
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(sampleWarehouse)
+        .mockResolvedValueOnce({ ...sampleWarehouse, id: "wh-target" });
+
+      mockPrisma.productVariantStock.findMany.mockResolvedValueOnce([]);
+
+      const result = await warehouseService.bulkCopyProducts("wh-target", {
+        sourceWarehouseId: "wh-1",
+      });
+
+      expect(result).toEqual({
+        copiedCount: 0,
+        skippedCount: 0,
+        totalSourceVariants: 0,
+      });
+      expect(mockPrisma.productVariantStock.createMany).not.toHaveBeenCalled();
+    });
+
+    it("should copy all variants with 0 stock by default and skip duplicates", async () => {
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(sampleWarehouse)
+        .mockResolvedValueOnce({ ...sampleWarehouse, id: "wh-target" });
+
+      // Source stocks: variant-1 (stock 10), variant-2 (stock 25), variant-3 (stock 5)
+      mockPrisma.productVariantStock.findMany
+        .mockResolvedValueOnce([
+          { variantId: "var-1", stock: 10 },
+          { variantId: "var-2", stock: 25 },
+          { variantId: "var-3", stock: 5 },
+        ])
+        // Target existing: var-2 already exists
+        .mockResolvedValueOnce([{ variantId: "var-2" }]);
+
+      const result = await warehouseService.bulkCopyProducts("wh-target", {
+        sourceWarehouseId: "wh-1",
+      });
+
+      expect(result).toEqual({
+        copiedCount: 2,
+        skippedCount: 1,
+        totalSourceVariants: 3,
+      });
+
+      expect(mockPrisma.productVariantStock.createMany).toHaveBeenCalledWith({
+        data: [
+          { warehouseId: "wh-target", variantId: "var-1", stock: 0 },
+          { warehouseId: "wh-target", variantId: "var-3", stock: 0 },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
+    it("should copy stock quantity if copyStockQuantity is true", async () => {
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(sampleWarehouse)
+        .mockResolvedValueOnce({ ...sampleWarehouse, id: "wh-target" });
+
+      mockPrisma.productVariantStock.findMany
+        .mockResolvedValueOnce([{ variantId: "var-1", stock: 50 }])
+        .mockResolvedValueOnce([]); // no duplicates in target
+
+      const result = await warehouseService.bulkCopyProducts("wh-target", {
+        sourceWarehouseId: "wh-1",
+        copyStockQuantity: true,
+      });
+
+      expect(result.copiedCount).toBe(1);
+      expect(mockPrisma.productVariantStock.createMany).toHaveBeenCalledWith({
+        data: [{ warehouseId: "wh-target", variantId: "var-1", stock: 50 }],
+        skipDuplicates: true,
+      });
+    });
+
+    it("should filter by variantIds if provided", async () => {
+      mockPrisma.warehouse.findUnique
+        .mockResolvedValueOnce(sampleWarehouse)
+        .mockResolvedValueOnce({ ...sampleWarehouse, id: "wh-target" });
+
+      mockPrisma.productVariantStock.findMany
+        .mockResolvedValueOnce([{ variantId: "var-1", stock: 10 }])
+        .mockResolvedValueOnce([]);
+
+      await warehouseService.bulkCopyProducts("wh-target", {
+        sourceWarehouseId: "wh-1",
+        variantIds: ["var-1"],
+      });
+
+      expect(mockPrisma.productVariantStock.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          where: {
+            warehouseId: "wh-1",
+            variantId: { in: ["var-1"] },
+          },
+        })
       );
     });
   });

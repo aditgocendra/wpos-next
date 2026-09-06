@@ -54,6 +54,7 @@ import {
   PackagePlusIcon,
   ImageIcon,
   ZoomInIcon,
+  CopyIcon,
 } from "lucide-react";
 import Image from "next/image";
 import type { ProductItem } from "@/services/inventory.service";
@@ -68,6 +69,8 @@ import { InventoryDeleteDialog } from "@/components/inventory/inventory-delete-d
 import { InventoryAddStockDialog } from "@/components/inventory/inventory-add-stock-dialog";
 import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 import { useCategory } from "@/providers/category-provider";
+import { WarehouseBulkCopyDialog } from "@/components/warehouse/warehouse-bulk-copy-dialog";
+import type { WarehouseItem } from "@/services/warehouse.service";
 
 const pageSizeItems = [
   { label: "10", value: "10" },
@@ -110,6 +113,8 @@ export function InventoryTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedProductForDelete, setSelectedProductForDelete] =
     React.useState<ProductItem | null>(null);
+
+  const [bulkCopyDialogOpen, setBulkCopyDialogOpen] = React.useState(false);
 
   const [zoomImage, setZoomImage] = React.useState<{ src: string; title: string } | null>(null);
 
@@ -500,6 +505,19 @@ export function InventoryTable() {
           >
             <RefreshCwIcon className={cn("size-4", loading && "animate-spin")} />
           </Button>
+
+          {currentUserRole === "SUPER_ADMIN" && (
+            <Button
+              variant="outline"
+              onClick={() => setBulkCopyDialogOpen(true)}
+              disabled={loading || warehouses.length < 2}
+              className="gap-2 shadow-xs"
+              title="Salin ketersediaan produk antar gudang"
+            >
+              <CopyIcon className="size-4 text-primary" />
+              <span className="hidden sm:inline">Salin Antar Gudang</span>
+            </Button>
+          )}
 
           <Button
             onClick={() => {
@@ -925,6 +943,15 @@ export function InventoryTable() {
         product={selectedProductForDelete}
         onSuccess={fetchData}
       />
+
+      {currentUserRole === "SUPER_ADMIN" && (
+        <WarehouseBulkCopyDialog
+          open={bulkCopyDialogOpen}
+          onOpenChange={setBulkCopyDialogOpen}
+          warehouses={warehouses as WarehouseItem[]}
+          onSuccess={fetchData}
+        />
+      )}
 
       {zoomImage && (
         <ImageZoomDialog
