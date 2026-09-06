@@ -150,10 +150,7 @@ export function OpnameForm() {
               ) ??
               0;
 
-            const variantImg =
-              variant.image ||
-              (variant.images && variant.images.length > 0 ? variant.images[0].image : null) ||
-              null;
+            const variantImg = variant.image || null;
 
             flattened.push({
               productId: prod.id,

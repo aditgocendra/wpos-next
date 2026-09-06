@@ -236,8 +236,7 @@ export function InventoryTable() {
           const prod = row.original;
           const isExp = row.getIsExpanded();
           const prodImg =
-            prod.image ||
-            prod.variants.find((v) => v.image)?.image ||
+            prod.variants[0]?.image ||
             null;
 
           return (
@@ -712,11 +711,7 @@ export function InventoryTable() {
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                             {row.original.variants.map((variant) => {
-                              const variantImg =
-                                variant.image ||
-                                (variant.images && variant.images.length > 0
-                                  ? variant.images[0].image
-                                  : null);
+                              const variantImg = variant.image || null;
 
                               return (
                                 <div
