@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getBaseShopeeSDK, getShopeeEnvConfig } from "@/lib/shopee/client";
+import { getBaseShopeeSDK, getShopeeEnvConfig, generateShopeeAuthUrl } from "@/lib/shopee/client";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -10,11 +10,10 @@ export async function GET(req: NextRequest) {
     const action = searchParams.get("action");
 
     const env = getShopeeEnvConfig();
-    const sdk = getBaseShopeeSDK();
 
     // 1. Jika request meminta URL otentikasi Shopee
     if (action === "get_auth_url") {
-      const authUrl = sdk.getAuthorizationUrl(env.redirectUrl);
+      const authUrl = generateShopeeAuthUrl(env.redirectUrl);
       return NextResponse.json({ url: authUrl });
     }
 
@@ -28,6 +27,7 @@ export async function GET(req: NextRequest) {
 
     const shopIdNum = parseInt(shopIdStr, 10);
     let tokenData = null;
+    const sdk = getBaseShopeeSDK();
 
     try {
       tokenData = await sdk.authenticateWithCode(code, shopIdNum);

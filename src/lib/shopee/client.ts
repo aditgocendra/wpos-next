@@ -28,6 +28,36 @@ export function getShopeeEnvConfig(): ShopeeEnvConfig {
 }
 
 /**
+ * Menggenerasi URL otentikasi resmi Shopee Open API v2 (/api/v2/shop/auth_partner)
+ * Dilengkapi dengan parameter signature HMAC-SHA256 dan timestamp wajib.
+ */
+export function generateShopeeAuthUrl(redirectUrl: string): string {
+  const env = getShopeeEnvConfig();
+  const path = "/api/v2/shop/auth_partner";
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  // Menggunakan domain resmi Shopee v2
+  const baseDomain = env.isUat
+    ? "https://openplatform.sandbox.test-stable.shopee.sg"
+    : "https://partner.shopeemobile.com";
+
+  // Base string: partner_id + path + timestamp
+  const baseString = `${env.partnerId}${path}${timestamp}`;
+  const sign = crypto
+    .createHmac("sha256", env.partnerKey)
+    .update(baseString)
+    .digest("hex");
+
+  const url = new URL(`${baseDomain}${path}`);
+  url.searchParams.append("partner_id", env.partnerId.toString());
+  url.searchParams.append("timestamp", timestamp.toString());
+  url.searchParams.append("sign", sign);
+  url.searchParams.append("redirect", redirectUrl);
+
+  return url.toString();
+}
+
+/**
  * Mendapatkan base instance ShopeeSDK untuk otentikasi awal (OAuth)
  */
 export function getBaseShopeeSDK(): ShopeeSDK {
