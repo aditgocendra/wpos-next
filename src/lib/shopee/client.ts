@@ -1,0 +1,135 @@
+import { ShopeeSDK, ShopeeConfig } from "@congminh1254/shopee-sdk";
+import { ShopeeRegion } from "@congminh1254/shopee-sdk/schemas";
+import { TokenStorage } from "@congminh1254/shopee-sdk/storage";
+import { AccessToken } from "@congminh1254/shopee-sdk/schemas/access-token";
+import { prisma } from "@/lib/prisma";
+import crypto from "crypto";
+
+export interface ShopeeEnvConfig {
+  partnerId: number;
+  partnerKey: string;
+  redirectUrl: string;
+  isUat: boolean;
+}
+
+export function getShopeeEnvConfig(): ShopeeEnvConfig {
+  const partnerId = parseInt(process.env.SHOPEE_PARTNER_ID || "0", 10);
+  const partnerKey = process.env.SHOPEE_PARTNER_KEY || "";
+  const redirectUrl =
+    process.env.SHOPEE_REDIRECT_URL || "http://localhost:3000/api/shopee/auth";
+  const isUat = process.env.SHOPEE_IS_UAT === "true";
+
+  return {
+    partnerId,
+    partnerKey,
+    redirectUrl,
+    isUat,
+  };
+}
+
+/**
+ * Mendapatkan base instance ShopeeSDK untuk otentikasi awal (OAuth)
+ */
+export function getBaseShopeeSDK(): ShopeeSDK {
+  const env = getShopeeEnvConfig();
+  const config: ShopeeConfig = {
+    partner_id: env.partnerId,
+    partner_key: env.partnerKey,
+    region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
+  };
+
+  return new ShopeeSDK(config);
+}
+
+/**
+ * Factory untuk membuat instance ShopeeSDK yang terikat pada satu record Integration di DB
+ * TokenStorage akan otomatis mengambil token dari database dan memperbarui database jika token di-refresh.
+ */
+export async function getShopeeClientForIntegration(integrationId: string): Promise<ShopeeSDK> {
+  const integration = await prisma.integration.findUnique({
+    where: { id: integrationId },
+  });
+
+  if (!integration) {
+    throw new Error(`Integration dengan ID ${integrationId} tidak ditemukan.`);
+  }
+
+  const env = getShopeeEnvConfig();
+  const shopIdNum = integration.shopId ? parseInt(integration.shopId, 10) : undefined;
+
+  const dbTokenStorage: TokenStorage = {
+    async get(): Promise<AccessToken | null> {
+      if (!integration.accessToken) return null;
+      return {
+        access_token: integration.accessToken,
+        refresh_token: integration.refreshToken || "",
+        expire_in: integration.tokenExpire
+          ? Math.max(0, Math.floor((integration.tokenExpire.getTime() - Date.now()) / 1000))
+          : 3600,
+        expired_at: integration.tokenExpire ? integration.tokenExpire.getTime() : undefined,
+        shop_id: shopIdNum,
+        request_id: "",
+        error: "",
+        message: "",
+      };
+    },
+    async store(token: AccessToken): Promise<void> {
+      const tokenExpire = token.expire_in
+        ? new Date(Date.now() + token.expire_in * 1000)
+        : undefined;
+
+      await prisma.integration.update({
+        where: { id: integrationId },
+        data: {
+          accessToken: token.access_token,
+          refreshToken: token.refresh_token,
+          tokenExpire,
+          updatedAt: new Date(),
+        },
+      });
+    },
+    async clear(): Promise<void> {
+      await prisma.integration.update({
+        where: { id: integrationId },
+        data: {
+          accessToken: null,
+          refreshToken: null,
+          tokenExpire: null,
+        },
+      });
+    },
+  };
+
+  const config: ShopeeConfig = {
+    partner_id: env.partnerId,
+    partner_key: env.partnerKey,
+    shop_id: shopIdNum,
+    region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
+  };
+
+  return new ShopeeSDK(config, dbTokenStorage);
+}
+
+/**
+ * Validasi signature webhook Push Notification dari Shopee
+ * Format: HMAC-SHA256(url + "|" + body, partner_key)
+ */
+export function verifyShopeeWebhookSignature(
+  url: string,
+  rawBody: string,
+  signatureHeader: string
+): boolean {
+  const env = getShopeeEnvConfig();
+  if (!env.partnerKey) {
+    // Jika partner key belum diset (misal dalam local mock testing), izinkan untuk keperluan testing
+    return true;
+  }
+
+  const baseString = `${url}|${rawBody}`;
+  const computedSignature = crypto
+    .createHmac("sha256", env.partnerKey)
+    .update(baseString)
+    .digest("hex");
+
+  return computedSignature.toLowerCase() === signatureHeader.toLowerCase();
+}

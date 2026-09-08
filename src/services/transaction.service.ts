@@ -1,4 +1,5 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
+import { shopeeSyncService } from "@/services/shopee-sync.service";
 
 export interface TransactionItemInput {
   productId: string;
@@ -280,7 +281,7 @@ export class TransactionService {
       throw new Error("Daftar barang penjualan tidak boleh kosong");
     }
 
-    return await this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       // 1. Verify warehouse exists
       const warehouse = await tx.warehouse.findUnique({
         where: { id: input.warehouseId },
@@ -424,6 +425,13 @@ export class TransactionService {
 
       return this.formatTransaction(created);
     });
+
+    // Push stock update to Shopee asynchronously if warehouse has an active Shopee integration
+    shopeeSyncService
+      .pushStockUpdateToShopee(input.warehouseId, input.items)
+      .catch((err) => console.error("Shopee stock push error on checkout:", err));
+
+    return result;
   }
 
   /**
