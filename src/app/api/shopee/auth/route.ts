@@ -51,14 +51,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Ambil default warehouse pertama jika belum ada
-    const defaultWarehouse = await prisma.warehouse.findFirst();
-    if (!defaultWarehouse) {
-      return NextResponse.redirect(
-        new URL("/integrations?error=Silakan+buat+gudang+terlebih+dahulu+sebelum+menghubungkan+toko", req.url)
-      );
-    }
-
     const tokenExpire = tokenData.expire_in
       ? new Date(Date.now() + tokenData.expire_in * 1000)
       : new Date(Date.now() + 4 * 3600 * 1000);
@@ -69,51 +61,34 @@ export async function GET(req: NextRequest) {
     });
 
     if (existingIntegration) {
+      // Update token toko yang sama tanpa mengubah toko lain
       await prisma.integration.update({
         where: { id: existingIntegration.id },
         data: {
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           tokenExpire,
-          status: existingIntegration.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
         },
       });
     } else {
-      // Buat record integrasi baru. Status awal INACTIVE sampai user memilih warehouse di UI
-      // Cek apakah warehouse sudah punya integrasi Shopee
-      const existingForWarehouse = await prisma.integration.findUnique({
-        where: {
-          warehouseId_platform: {
-            warehouseId: defaultWarehouse.id,
-            platform: "SHOPEE",
-          },
+      // Cari apakah ada gudang yang belum terhubung ke toko Shopee mana pun
+      const warehouses = await prisma.warehouse.findMany({
+        include: { integrations: { where: { platform: "SHOPEE" } } },
+      });
+      const availableWarehouse = warehouses.find((w) => w.integrations.length === 0);
+
+      // Buat integrasi baru untuk toko ini secara independen
+      await prisma.integration.create({
+        data: {
+          platform: "SHOPEE",
+          shopId: shopIdStr,
+          warehouseId: availableWarehouse ? availableWarehouse.id : null,
+          accessToken: tokenData.access_token,
+          refreshToken: tokenData.refresh_token,
+          tokenExpire,
+          status: "INACTIVE",
         },
       });
-
-      if (existingForWarehouse) {
-        // Update token di integrasi yang sudah ada
-        await prisma.integration.update({
-          where: { id: existingForWarehouse.id },
-          data: {
-            shopId: shopIdStr,
-            accessToken: tokenData.access_token,
-            refreshToken: tokenData.refresh_token,
-            tokenExpire,
-          },
-        });
-      } else {
-        await prisma.integration.create({
-          data: {
-            platform: "SHOPEE",
-            shopId: shopIdStr,
-            warehouseId: defaultWarehouse.id,
-            accessToken: tokenData.access_token,
-            refreshToken: tokenData.refresh_token,
-            tokenExpire,
-            status: "INACTIVE",
-          },
-        });
-      }
     }
 
     return NextResponse.redirect(

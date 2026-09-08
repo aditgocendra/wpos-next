@@ -59,14 +59,15 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!integration) {
+    if (!integration || !integration.warehouseId || !integration.warehouse) {
       return NextResponse.json({
         code: 0,
-        message: `Toko Shopee shopId ${shopIdNum} belum terhubung atau tidak aktif.`,
+        message: `Toko Shopee shopId ${shopIdNum} belum terhubung ke gudang atau tidak aktif.`,
       });
     }
 
     const warehouseId = integration.warehouseId;
+    const warehouseName = integration.warehouse.name;
     let itemsToDeduct: Array<{ sku: string; quantity: number }> = [];
 
     // 4. Ambil rincian item pesanan
@@ -137,7 +138,7 @@ export async function POST(req: NextRequest) {
       });
 
       deductionLogs.push(
-        `Stok SKU ${item.sku} di gudang ${integration.warehouse.name} dipotong ${item.quantity} (Sisa: ${updatedStock.stock}) untuk Shopee Order #${orderSn}`
+        `Stok SKU ${item.sku} di gudang ${warehouseName} dipotong ${item.quantity} (Sisa: ${updatedStock.stock}) untuk Shopee Order #${orderSn}`
       );
     }
 

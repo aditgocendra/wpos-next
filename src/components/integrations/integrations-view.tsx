@@ -40,13 +40,13 @@ interface Warehouse {
 
 interface Integration {
   id: string;
-  warehouseId: string;
+  warehouseId: string | null;
   platform: string;
   shopId: string | null;
   status: string;
   tokenExpire: string | null;
   createdAt: string;
-  warehouse: Warehouse;
+  warehouse: Warehouse | null;
   _count: {
     products: number;
     syncJobs: number;
@@ -285,7 +285,7 @@ export function IntegrationsView() {
                       <div className="flex items-center gap-2 min-w-[200px]">
                         <WarehouseIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                         <Select
-                          defaultValue={item.warehouseId}
+                          defaultValue={item.warehouseId || undefined}
                           onValueChange={(val) => {
                             if (val) handleWarehouseChange(item.id, val);
                           }}
