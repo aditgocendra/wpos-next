@@ -23,6 +23,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   ShoppingBagIcon,
   RefreshCwIcon,
   WarehouseIcon,
@@ -62,6 +72,7 @@ export function IntegrationsView() {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingIntegration, setDeletingIntegration] = useState<Integration | null>(null);
 
   // Handle URL feedback query params (e.g. from OAuth redirect)
   useEffect(() => {
@@ -154,17 +165,18 @@ export function IntegrationsView() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Apakah Anda yakin ingin memutuskan koneksi toko ini?")) return;
+  const confirmDelete = async () => {
+    if (!deletingIntegration) return;
 
     try {
-      setUpdatingId(id);
-      const res = await fetch(`/api/shopee/integrations?id=${id}`, {
+      setUpdatingId(deletingIntegration.id);
+      const res = await fetch(`/api/shopee/integrations?id=${deletingIntegration.id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Gagal menghapus integrasi");
 
       toast.success("Toko Shopee berhasil diputuskan");
+      setDeletingIntegration(null);
       fetchIntegrations();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal memutuskan koneksi");
@@ -355,7 +367,7 @@ export function IntegrationsView() {
                           size="sm"
                           className="h-8 w-8 p-0 text-destructive hover:bg-destructive/10"
                           disabled={updatingId === item.id}
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => setDeletingIntegration(item)}
                         >
                           <Trash2Icon className="h-4 w-4" />
                         </Button>
@@ -368,6 +380,47 @@ export function IntegrationsView() {
           )}
         </CardContent>
       </Card>
+
+      {/* Confirmation Dialog for Disconnecting Store */}
+      <AlertDialog
+        open={!!deletingIntegration}
+        onOpenChange={(open) => {
+          if (!open) setDeletingIntegration(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Putuskan Koneksi Toko Shopee?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Apakah Anda yakin ingin memutuskan koneksi toko Shopee{" "}
+              <strong className="text-foreground">
+                Shop ID: {deletingIntegration?.shopId || "-"}
+              </strong>
+              {deletingIntegration?.warehouse && (
+                <>
+                  {" "}yang terhubung ke gudang{" "}
+                  <strong className="text-foreground">
+                    {deletingIntegration.warehouse.name}
+                  </strong>
+                </>
+              )}
+              ? Seluruh pemetaan produk lokal dan riwayat sinkronisasi untuk toko ini akan dihapus.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={!!updatingId}>
+              Batal
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={!!updatingId}
+              onClick={confirmDelete}
+            >
+              {updatingId ? "Memutuskan..." : "Ya, Putuskan"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
