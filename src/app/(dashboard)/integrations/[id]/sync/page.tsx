@@ -4,6 +4,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { SyncView } from "@/components/integrations/sync-view";
 import { Metadata } from "next";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Sinkronisasi Produk Shopee - WPOS System",
   description: "Sinkronisasi produk massal dari Shopee ke sistem POS WPOS.",

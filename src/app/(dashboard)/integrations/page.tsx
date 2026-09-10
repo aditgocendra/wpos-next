@@ -1,8 +1,11 @@
+import { Suspense } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { IntegrationsView } from "@/components/integrations/integrations-view";
 import { Metadata } from "next";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Integrasi E-Commerce - WPOS System",
@@ -24,7 +27,15 @@ export default function IntegrationsPage() {
         <SiteHeader />
         <main className="flex flex-1 flex-col p-4 md:p-6 lg:p-8">
           <div className="mx-auto w-full max-w-9xl">
-            <IntegrationsView />
+            <Suspense
+              fallback={
+                <div className="p-8 text-center text-sm text-muted-foreground animate-pulse">
+                  Memuat data integrasi...
+                </div>
+              }
+            >
+              <IntegrationsView />
+            </Suspense>
           </div>
         </main>
       </SidebarInset>
