@@ -186,6 +186,31 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        // Cek apakah error terkait Partner ID tidak valid / tidak terbaca di Vercel
+        const isParamError =
+          msg.includes("Partner_id is invalid") ||
+          msg.includes("error_param");
+
+        if (isParamError) {
+          if (currentJobId) {
+            await prisma.syncJob.update({
+              where: { id: currentJobId },
+              data: {
+                status: "FAILED",
+                errorMessage: "Partner ID Shopee tidak valid di environment server Vercel.",
+              },
+            });
+          }
+
+          return NextResponse.json(
+            {
+              error: "SHOPEE_PARTNER_ID tidak valid atau belum terbaca di Vercel. Pastikan SHOPEE_PARTNER_ID berupa angka tanpa tanda kutip di Environment Variables Vercel.",
+              details: msg,
+            },
+            { status: 400 }
+          );
+        }
+
         return NextResponse.json(
           { error: `Gagal menarik produk dari Shopee: ${msg}` },
           { status: 502 }

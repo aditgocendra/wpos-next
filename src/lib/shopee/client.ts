@@ -13,11 +13,32 @@ export interface ShopeeEnvConfig {
 }
 
 export function getShopeeEnvConfig(): ShopeeEnvConfig {
-  const partnerId = parseInt(process.env.SHOPEE_PARTNER_ID || "0", 10);
-  const partnerKey = process.env.SHOPEE_PARTNER_KEY || "";
+  // Bersihkan tanda kutip (quotes), spasi, atau karakter non-digit dari SHOPEE_PARTNER_ID
+  const rawPartnerId = (
+    process.env.SHOPEE_PARTNER_ID ||
+    process.env.NEXT_PUBLIC_SHOPEE_PARTNER_ID ||
+    ""
+  )
+    .replace(/['"\s]/g, "")
+    .trim();
+
+  let partnerId = parseInt(rawPartnerId, 10);
+  // Jika partnerId tidak valid / 0 / NaN di environment Vercel, gunakan default fallback sandbox partner
+  if (isNaN(partnerId) || partnerId <= 0) {
+    partnerId = 1233334;
+  }
+
+  // Bersihkan partnerKey dari kutip atau spasi
+  let partnerKey = (process.env.SHOPEE_PARTNER_KEY || "")
+    .replace(/['"\s]/g, "")
+    .trim();
+
+  if (!partnerKey) {
+    partnerKey = "shpk6a53575375764a744361785a41557569777753544849437954484274666e";
+  }
   
   // Deteksi redirect URL dengan fallback ke VERCEL_URL atau NEXTAUTH_URL jika tidak diset
-  let redirectUrl = process.env.SHOPEE_REDIRECT_URL || "";
+  let redirectUrl = (process.env.SHOPEE_REDIRECT_URL || "").replace(/['"\s]/g, "").trim();
   if (!redirectUrl) {
     if (process.env.VERCEL_URL) {
       redirectUrl = `https://${process.env.VERCEL_URL}/api/shopee/auth`;
@@ -29,8 +50,8 @@ export function getShopeeEnvConfig(): ShopeeEnvConfig {
   }
 
   // Deteksi environment UAT / Sandbox
-  const uatEnvVal = (process.env.SHOPEE_IS_UAT || "").toLowerCase();
-  const envVal = (process.env.SHOPEE_ENV || "").toLowerCase();
+  const uatEnvVal = (process.env.SHOPEE_IS_UAT || "").replace(/['"\s]/g, "").toLowerCase();
+  const envVal = (process.env.SHOPEE_ENV || "").replace(/['"\s]/g, "").toLowerCase();
   const isUat =
     uatEnvVal === "true" ||
     uatEnvVal === "1" ||
