@@ -104,8 +104,8 @@ export function generateShopeeAuthUrl(redirectUrl: string): string {
 export function getBaseShopeeSDK(): ShopeeSDK {
   const env = getShopeeEnvConfig();
   const config: ShopeeConfig = {
-    partner_id: env.partnerId,
-    partner_key: env.partnerKey,
+    partner_id: Number(env.partnerId),
+    partner_key: String(env.partnerKey),
     region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
   };
 
@@ -182,8 +182,8 @@ export async function getShopeeClientForIntegration(integrationId: string): Prom
   };
 
   const config: ShopeeConfig = {
-    partner_id: env.partnerId,
-    partner_key: env.partnerKey,
+    partner_id: Number(env.partnerId),
+    partner_key: String(env.partnerKey),
     shop_id: shopIdNum,
     region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
   };
