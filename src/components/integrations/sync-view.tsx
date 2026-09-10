@@ -13,6 +13,8 @@ import {
   RefreshCwIcon,
   CheckCircle2Icon,
   AlertTriangleIcon,
+  AlertCircleIcon,
+  ShoppingBagIcon,
   CheckIcon,
   WarehouseIcon,
 } from "lucide-react";
@@ -41,6 +43,8 @@ export function SyncView({ integrationId }: SyncViewProps) {
   // Sync state
   const [isRunning, setIsRunning] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [authExpired, setAuthExpired] = useState(false);
+  const [reauthorizing, setReauthorizing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [totalItems, setTotalItems] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
@@ -69,9 +73,27 @@ export function SyncView({ integrationId }: SyncViewProps) {
     loadIntegration();
   }, [integrationId]);
 
+  const handleReauthorize = async () => {
+    try {
+      setReauthorizing(true);
+      const res = await fetch("/api/shopee/auth?action=get_auth_url");
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error("Gagal mendapatkan link otorisasi Shopee");
+      }
+    } catch {
+      toast.error("Gagal menghubungi server otorisasi");
+    } finally {
+      setReauthorizing(false);
+    }
+  };
+
   const runSync = async () => {
     setIsRunning(true);
     setIsFinished(false);
+    setAuthExpired(false);
     setProgressPercent(0);
     setProcessedCount(0);
     setLinkedCount(0);
@@ -101,7 +123,15 @@ export function SyncView({ integrationId }: SyncViewProps) {
         });
 
         if (!res.ok) {
-          const errData = await res.json();
+          const errData = await res.json().catch(() => ({ error: "Gagal sinkronisasi batch" }));
+          if (
+            errData.authExpired ||
+            res.status === 401 ||
+            String(errData.error).includes("error_shop_refresh_token") ||
+            String(errData.error).includes("refresh token")
+          ) {
+            setAuthExpired(true);
+          }
           throw new Error(errData.error || "Gagal sinkronisasi batch");
         }
 
@@ -227,6 +257,34 @@ export function SyncView({ integrationId }: SyncViewProps) {
           )}
         </div>
       </div>
+
+      {/* Auth Expired Alert */}
+      {authExpired && (
+        <Card className="border-red-300 bg-red-50/80 dark:border-red-900 dark:bg-red-950/40 shadow-sm">
+          <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <AlertCircleIcon className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-destructive">
+                  Sesi Otorisasi Toko Shopee Kedaluwarsa
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Shopee menolak token otorisasi toko ini (<code>error_shop_refresh_token</code>). Masa berlaku refresh token telah habis atau tidak sesuai dengan sandbox/production. Silakan lakukan otorisasi ulang untuk memperbarui token toko.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              disabled={reauthorizing}
+              onClick={handleReauthorize}
+              className="bg-[#EE4D2D] hover:bg-[#d73211] text-white shrink-0 font-medium"
+            >
+              <ShoppingBagIcon className={`mr-2 h-4 w-4 ${reauthorizing ? "animate-spin" : ""}`} />
+              {reauthorizing ? "Membuka Shopee..." : "Otorisasi Ulang Toko Ini"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

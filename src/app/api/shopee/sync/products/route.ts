@@ -146,6 +146,46 @@ export async function POST(req: NextRequest) {
         nextOffset = offset + currentSimulated;
       } else {
         const msg = apiError instanceof Error ? apiError.message : String(apiError);
+        
+        // Cek apakah error terkait token / refresh token yang kedaluwarsa
+        const isAuthError =
+          msg.includes("error_shop_refresh_token") ||
+          msg.includes("invalid_access_token") ||
+          msg.includes("invalid_refresh_token") ||
+          msg.includes("error_auth") ||
+          msg.includes("No access token found") ||
+          msg.includes("No token found to refresh") ||
+          (msg.includes("403") && msg.includes("refresh_token"));
+
+        if (currentJobId) {
+          await prisma.syncJob.update({
+            where: { id: currentJobId },
+            data: {
+              status: "FAILED",
+              errorMessage: isAuthError
+                ? "Sesi otorisasi Shopee telah kedaluwarsa (error_shop_refresh_token). Silakan lakukan otorisasi ulang toko."
+                : msg,
+            },
+          });
+        }
+
+        if (isAuthError) {
+          // Tandai integrasi agar admin tahu perlu re-auth
+          await prisma.integration.update({
+            where: { id: integrationId },
+            data: { status: "INACTIVE" },
+          });
+
+          return NextResponse.json(
+            {
+              error: "Sesi otorisasi Shopee telah kedaluwarsa atau token tidak valid (error_shop_refresh_token). Silakan lakukan Otorisasi Ulang toko Shopee di menu Integrasi.",
+              authExpired: true,
+              details: msg,
+            },
+            { status: 401 }
+          );
+        }
+
         return NextResponse.json(
           { error: `Gagal menarik produk dari Shopee: ${msg}` },
           { status: 502 }

@@ -381,22 +381,22 @@ export function IntegrationsView() {
                     </TableCell>
 
                     <TableCell>
-                      <Badge
-                        variant={item.status === "ACTIVE" ? "default" : "secondary"}
-                        className={
-                          item.status === "ACTIVE"
-                            ? "bg-emerald-600 hover:bg-emerald-600 text-white"
-                            : ""
-                        }
-                      >
-                        {item.status === "ACTIVE" ? (
+                      {item.status === "ACTIVE" ? (
+                        <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">
                           <span className="flex items-center gap-1">
                             <CheckCircle2Icon className="h-3 w-3" /> Aktif
                           </span>
-                        ) : (
-                          "Non-Aktif"
-                        )}
-                      </Badge>
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800"
+                        >
+                          <span className="flex items-center gap-1">
+                            <AlertCircleIcon className="h-3 w-3" /> Perlu Re-auth
+                          </span>
+                        </Badge>
+                      )}
                     </TableCell>
 
                     <TableCell className="text-right">
@@ -409,6 +409,17 @@ export function IntegrationsView() {
                         >
                           <ExternalLinkIcon className="h-3.5 w-3.5 mr-1" />
                           Sync Produk
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs text-[#EE4D2D] border-orange-200 hover:bg-orange-50 hover:text-[#d73211] dark:border-orange-900 dark:hover:bg-orange-950/40"
+                          disabled={connecting}
+                          onClick={handleConnectShopee}
+                          title="Perbarui token otorisasi Shopee jika sesi kedaluwarsa"
+                        >
+                          <RefreshCwIcon className={`h-3.5 w-3.5 mr-1 ${connecting ? "animate-spin" : ""}`} />
+                          Hubungkan Ulang
                         </Button>
                         <Button
                           variant="ghost"

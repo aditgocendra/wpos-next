@@ -13,7 +13,17 @@ export async function GET(req: NextRequest) {
 
     // 1. Jika request meminta URL otentikasi Shopee
     if (action === "get_auth_url") {
-      const authUrl = generateShopeeAuthUrl(env.redirectUrl);
+      const redirectQuery = searchParams.get("redirect");
+      let targetRedirect = redirectQuery || env.redirectUrl;
+
+      // Jika env.redirectUrl belum di-set eksplisit di env dan diakses dari domain non-localhost (misal Vercel preview)
+      const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+      const proto = req.headers.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
+      if (!process.env.SHOPEE_REDIRECT_URL && host && !host.includes("localhost") && !redirectQuery) {
+        targetRedirect = `${proto}://${host}/api/shopee/auth`;
+      }
+
+      const authUrl = generateShopeeAuthUrl(targetRedirect);
       return NextResponse.json({ url: authUrl });
     }
 
@@ -61,15 +71,24 @@ export async function GET(req: NextRequest) {
     });
 
     if (existingIntegration) {
-      // Update token toko yang sama tanpa mengubah toko lain
+      // Update token toko yang sama (Otorisasi Ulang) tanpa mengubah toko lain
       await prisma.integration.update({
         where: { id: existingIntegration.id },
         data: {
           accessToken: tokenData.access_token,
           refreshToken: tokenData.refresh_token,
           tokenExpire,
+          status: existingIntegration.warehouseId ? "ACTIVE" : "INACTIVE",
+          updatedAt: new Date(),
         },
       });
+
+      return NextResponse.redirect(
+        new URL(
+          `/integrations?success=Toko+Shopee+(Shop+ID:+${shopIdStr})+berhasil+diotorisasi+ulang.+Token+telah+diperbarui.&shop_id=${shopIdStr}`,
+          req.url
+        )
+      );
     } else {
       // Cari apakah ada gudang yang belum terhubung ke toko Shopee mana pun
       const warehouses = await prisma.warehouse.findMany({

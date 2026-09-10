@@ -15,9 +15,29 @@ export interface ShopeeEnvConfig {
 export function getShopeeEnvConfig(): ShopeeEnvConfig {
   const partnerId = parseInt(process.env.SHOPEE_PARTNER_ID || "0", 10);
   const partnerKey = process.env.SHOPEE_PARTNER_KEY || "";
-  const redirectUrl =
-    process.env.SHOPEE_REDIRECT_URL || "http://localhost:3000/api/shopee/auth";
-  const isUat = process.env.SHOPEE_IS_UAT === "true";
+  
+  // Deteksi redirect URL dengan fallback ke VERCEL_URL atau NEXTAUTH_URL jika tidak diset
+  let redirectUrl = process.env.SHOPEE_REDIRECT_URL || "";
+  if (!redirectUrl) {
+    if (process.env.VERCEL_URL) {
+      redirectUrl = `https://${process.env.VERCEL_URL}/api/shopee/auth`;
+    } else if (process.env.NEXTAUTH_URL) {
+      redirectUrl = `${process.env.NEXTAUTH_URL}/api/shopee/auth`;
+    } else {
+      redirectUrl = "http://localhost:3000/api/shopee/auth";
+    }
+  }
+
+  // Deteksi environment UAT / Sandbox
+  const uatEnvVal = (process.env.SHOPEE_IS_UAT || "").toLowerCase();
+  const envVal = (process.env.SHOPEE_ENV || "").toLowerCase();
+  const isUat =
+    uatEnvVal === "true" ||
+    uatEnvVal === "1" ||
+    uatEnvVal === "yes" ||
+    envVal === "sandbox" ||
+    envVal === "uat" ||
+    partnerId === 1233334;
 
   return {
     partnerId,
