@@ -5,10 +5,12 @@ import { getToken } from "next-auth/jwt";
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Skip public assets and static files
+  // Skip public assets, webhook endpoints, and auth callbacks
   if (
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/setup") ||
+    pathname.startsWith("/api/shopee/auth") ||
+    pathname.startsWith("/api/shopee/webhooks") ||
     pathname === "/setup" ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
@@ -71,7 +73,9 @@ export async function proxy(req: NextRequest) {
         pathname.startsWith("/api/transfers") ||
         pathname.startsWith("/api/inventory") ||
         pathname.startsWith("/api/categories") ||
-        pathname.startsWith("/api/opname");
+        pathname.startsWith("/api/opname") ||
+        pathname.startsWith("/api/shopee/sync/stock") ||
+        pathname.startsWith("/api/shopee/sync/orders");
       if (!isAllowedApi) {
         return NextResponse.json(
           { error: "Forbidden: Akses ditolak untuk role Warehouse Admin" },

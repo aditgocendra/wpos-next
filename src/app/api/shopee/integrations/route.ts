@@ -59,25 +59,28 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "ID integrasi diperlukan" }, { status: 400 });
     }
 
-    const data: { warehouseId?: string; status?: string } = {};
+    const data: { warehouseId?: string | null; status?: string } = {};
 
-    if (warehouseId) {
-      // Pastikan warehouse belum terhubung dengan toko Shopee lain
-      const existing = await prisma.integration.findFirst({
-        where: {
-          warehouseId,
-          platform: "SHOPEE",
-          id: { not: id },
-        },
-      });
+    if (warehouseId !== undefined) {
+      if (!warehouseId || warehouseId === "none") {
+        data.warehouseId = null;
+        if (!status) {
+          data.status = "INACTIVE";
+        }
+      } else {
+        const warehouseExists = await prisma.warehouse.findUnique({
+          where: { id: warehouseId },
+        });
 
-      if (existing) {
-        return NextResponse.json(
-          { error: "Gudang ini sudah terhubung dengan toko Shopee lain." },
-          { status: 400 }
-        );
+        if (!warehouseExists) {
+          return NextResponse.json({ error: "Gudang tidak ditemukan" }, { status: 404 });
+        }
+
+        data.warehouseId = warehouseId;
+        if (!status) {
+          data.status = "ACTIVE";
+        }
       }
-      data.warehouseId = warehouseId;
     }
 
     if (status) {

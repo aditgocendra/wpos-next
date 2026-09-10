@@ -87,16 +87,20 @@ export async function getShopeeClientForIntegration(integrationId: string): Prom
   const env = getShopeeEnvConfig();
   const shopIdNum = integration.shopId ? parseInt(integration.shopId, 10) : undefined;
 
+  let currentAccessToken = integration.accessToken;
+  let currentRefreshToken = integration.refreshToken;
+  let currentTokenExpire = integration.tokenExpire;
+
   const dbTokenStorage: TokenStorage = {
     async get(): Promise<AccessToken | null> {
-      if (!integration.accessToken) return null;
+      if (!currentAccessToken) return null;
       return {
-        access_token: integration.accessToken,
-        refresh_token: integration.refreshToken || "",
-        expire_in: integration.tokenExpire
-          ? Math.max(0, Math.floor((integration.tokenExpire.getTime() - Date.now()) / 1000))
+        access_token: currentAccessToken,
+        refresh_token: currentRefreshToken || "",
+        expire_in: currentTokenExpire
+          ? Math.max(0, Math.floor((currentTokenExpire.getTime() - Date.now()) / 1000))
           : 3600,
-        expired_at: integration.tokenExpire ? integration.tokenExpire.getTime() : undefined,
+        expired_at: currentTokenExpire ? currentTokenExpire.getTime() : undefined,
         shop_id: shopIdNum,
         request_id: "",
         error: "",
@@ -104,21 +108,27 @@ export async function getShopeeClientForIntegration(integrationId: string): Prom
       };
     },
     async store(token: AccessToken): Promise<void> {
-      const tokenExpire = token.expire_in
+      currentAccessToken = token.access_token;
+      currentRefreshToken = token.refresh_token;
+      currentTokenExpire = token.expire_in
         ? new Date(Date.now() + token.expire_in * 1000)
-        : undefined;
+        : null;
 
       await prisma.integration.update({
         where: { id: integrationId },
         data: {
           accessToken: token.access_token,
           refreshToken: token.refresh_token,
-          tokenExpire,
+          tokenExpire: currentTokenExpire,
           updatedAt: new Date(),
         },
       });
     },
     async clear(): Promise<void> {
+      currentAccessToken = null;
+      currentRefreshToken = null;
+      currentTokenExpire = null;
+
       await prisma.integration.update({
         where: { id: integrationId },
         data: {

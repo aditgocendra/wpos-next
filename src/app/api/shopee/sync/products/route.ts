@@ -54,8 +54,11 @@ export async function POST(req: NextRequest) {
     let nextOffset = offset + pageSize;
     let totalItems = 0;
 
+    let shopeeClient: Awaited<ReturnType<typeof getShopeeClientForIntegration>> | null = null;
+
     try {
-      const shopee = await getShopeeClientForIntegration(integrationId);
+      shopeeClient = await getShopeeClientForIntegration(integrationId);
+      const shopee = shopeeClient;
       // Panggil API Shopee
       const listRes = await shopee.product.getItemList({
         offset: Number(offset),
@@ -65,10 +68,10 @@ export async function POST(req: NextRequest) {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const responseData = (listRes as any)?.response || listRes;
-      const itemList = responseData?.item_list || [];
+      const itemList = responseData?.item || responseData?.item_list || [];
       hasMore = responseData?.has_next_page ?? false;
-      nextOffset = responseData?.next_offset ?? offset + pageSize;
-      totalItems = responseData?.total_count ?? 0;
+      nextOffset = responseData?.next_offset ?? Number(offset) + itemList.length;
+      totalItems = responseData?.total_count ?? (Number(offset) + itemList.length);
 
       if (itemList.length > 0) {
         // Ambil detail base info untuk mendapatkan nama & SKU
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const infoData = (infoRes as any)?.response || infoRes;
-        const itemDetailList = infoData?.item_list || [];
+        const itemDetailList = infoData?.item_list || infoData?.item || [];
 
         for (const item of itemDetailList) {
           if (item.has_model) {
@@ -90,29 +93,32 @@ export async function POST(req: NextRequest) {
               const modelData = (modelRes as any)?.response || modelRes;
               const models = modelData?.model || [];
               for (const m of models) {
+                const rawSku = (m.model_sku || item.item_sku || "").trim();
                 itemsToProcess.push({
                   itemId: String(item.item_id),
                   modelId: String(m.model_id),
                   name: `${item.item_name} - ${m.model_name}`,
-                  sku: m.model_sku || item.item_sku || `SHOPEE-${item.item_id}-${m.model_id}`,
+                  sku: rawSku || `SHOPEE-${item.item_id}-${m.model_id}`,
                   stock: m.stock_info_v2?.summary_info?.total_available_stock ?? 0,
                   price: m.price_info?.[0]?.current_price ?? 0,
                 });
               }
             } catch {
+              const rawSku = (item.item_sku || "").trim();
               itemsToProcess.push({
                 itemId: String(item.item_id),
                 name: item.item_name,
-                sku: item.item_sku || `SHOPEE-${item.item_id}`,
+                sku: rawSku || `SHOPEE-${item.item_id}`,
                 stock: 0,
                 price: 0,
               });
             }
           } else {
+            const rawSku = (item.item_sku || "").trim();
             itemsToProcess.push({
               itemId: String(item.item_id),
               name: item.item_name,
-              sku: item.item_sku || `SHOPEE-${item.item_id}`,
+              sku: rawSku || `SHOPEE-${item.item_id}`,
               stock: item.stock_info_v2?.summary_info?.total_available_stock ?? 0,
               price: item.price_info?.[0]?.current_price ?? 0,
             });
@@ -120,32 +126,45 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch (apiError) {
-      console.warn("Shopee API call fallback to mock simulation:", apiError);
-      // Fallback simulasi jika sandbox credentials belum aktif
-      const simulatedTotal = 30;
-      totalItems = simulatedTotal;
-      const currentSimulated = Math.min(pageSize, Math.max(0, simulatedTotal - offset));
-      for (let i = 0; i < currentSimulated; i++) {
-        const itemIndex = offset + i + 1;
-        itemsToProcess.push({
-          itemId: `mock_item_${itemIndex}`,
-          name: `Sample Shopee Product #${itemIndex}`,
-          sku: `SKU-SP-${1000 + itemIndex}`,
-          stock: 50,
-          price: 150000,
-        });
+      console.error("Shopee API call error:", apiError);
+      // Fallback simulasi jika offline / sandbox credentials belum aktif
+      if (process.env.SHOPEE_USE_MOCK === "true") {
+        const simulatedTotal = 30;
+        totalItems = simulatedTotal;
+        const currentSimulated = Math.min(pageSize, Math.max(0, simulatedTotal - offset));
+        for (let i = 0; i < currentSimulated; i++) {
+          const itemIndex = offset + i + 1;
+          itemsToProcess.push({
+            itemId: `mock_item_${itemIndex}`,
+            name: `Sample Shopee Product #${itemIndex}`,
+            sku: `SKU-SP-${1000 + itemIndex}`,
+            stock: 50,
+            price: 150000,
+          });
+        }
+        hasMore = offset + currentSimulated < simulatedTotal;
+        nextOffset = offset + currentSimulated;
+      } else {
+        const msg = apiError instanceof Error ? apiError.message : String(apiError);
+        return NextResponse.json(
+          { error: `Gagal menarik produk dari Shopee: ${msg}` },
+          { status: 502 }
+        );
       }
-      hasMore = offset + currentSimulated < simulatedTotal;
-      nextOffset = offset + currentSimulated;
     }
 
     // 2. Pencocokan ke Database Lokal berdasarkan SKU
     const processedResults = [];
 
     for (const item of itemsToProcess) {
-      // Cari varian lokal berdasarkan SKU
+      // Cari varian lokal berdasarkan SKU (case-insensitive & trimmed)
       const matchedVariant = await prisma.productVariant.findFirst({
-        where: { sku: item.sku },
+        where: {
+          sku: {
+            equals: item.sku.trim(),
+            mode: "insensitive",
+          },
+        },
         include: { product: true },
       });
 
@@ -176,12 +195,56 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      // Jika varian cocok dan toko memiliki pemetaan gudang, lakukan penyesuaian stok langsung ke Shopee
+      let stockAdjusted = false;
+      let warehouseStock: number | null = null;
+
+      if (matchedVariant && integration.warehouseId) {
+        const stockRecord = await prisma.productVariantStock.findUnique({
+          where: {
+            variantId_warehouseId: {
+              variantId: matchedVariant.id,
+              warehouseId: integration.warehouseId,
+            },
+          },
+        });
+        warehouseStock = stockRecord ? Math.max(0, stockRecord.stock) : 0;
+        const itemId = parseInt(item.itemId, 10);
+        const modelId = item.modelId ? parseInt(item.modelId, 10) : undefined;
+
+        if (!isNaN(itemId) && shopeeClient) {
+          try {
+            await shopeeClient.product.updateStock({
+              item_id: itemId,
+              stock_list: [
+                {
+                  model_id: modelId || 0,
+                  seller_stock: [
+                    {
+                      stock: warehouseStock,
+                    },
+                  ],
+                },
+              ],
+            });
+            stockAdjusted = true;
+          } catch (stockErr) {
+            console.warn(
+              `Gagal sesuaikan stok Shopee untuk item ${itemId} model ${modelId}:`,
+              stockErr
+            );
+          }
+        }
+      }
+
       processedResults.push({
         sku: item.sku,
         name: item.name,
         isLinked: !!matchedVariant,
         localProductName: matchedVariant?.product?.name || null,
         syncStatus: linked.syncStatus,
+        stockAdjusted,
+        warehouseStock,
       });
     }
 

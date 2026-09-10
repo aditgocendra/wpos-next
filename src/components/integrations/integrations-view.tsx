@@ -40,6 +40,7 @@ import {
   ExternalLinkIcon,
   CheckCircle2Icon,
   AlertCircleIcon,
+  TruckIcon,
 } from "lucide-react";
 
 interface Warehouse {
@@ -73,6 +74,7 @@ export function IntegrationsView() {
   const [connecting, setConnecting] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingIntegration, setDeletingIntegration] = useState<Integration | null>(null);
+  const [syncingOrders, setSyncingOrders] = useState(false);
 
   // Handle URL feedback query params (e.g. from OAuth redirect)
   useEffect(() => {
@@ -127,15 +129,23 @@ export function IntegrationsView() {
   const handleWarehouseChange = async (integrationId: string, warehouseId: string) => {
     try {
       setUpdatingId(integrationId);
+      const finalWarehouseId = warehouseId === "none" ? null : warehouseId;
       const res = await fetch("/api/shopee/integrations", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: integrationId, warehouseId }),
+        body: JSON.stringify({
+          id: integrationId,
+          warehouseId: finalWarehouseId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal mengubah gudang");
 
-      toast.success("Gudang berhasil dipetakan ke toko ini");
+      toast.success(
+        finalWarehouseId
+          ? "Gudang berhasil dipetakan ke toko ini"
+          : "Pemetaan gudang berhasil dilepas"
+      );
       fetchIntegrations();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal mengubah gudang");
@@ -185,6 +195,39 @@ export function IntegrationsView() {
     }
   };
 
+  const handleSyncShippedOrders = async () => {
+    const toastId = toast.loading("Memeriksa pesanan Shopee yang telah diserahkan ke jasa pengiriman...");
+    try {
+      setSyncingOrders(true);
+      const res = await fetch("/api/shopee/sync/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal memproses pesanan Shopee");
+
+      if (data.processedOrdersCount > 0) {
+        toast.success(
+          `Sinkronisasi Pesanan Selesai! ${data.processedOrdersCount} pesanan diproses. Stok gudang dan toko Shopee telah diperbarui.`,
+          { id: toastId, duration: 5000 }
+        );
+        fetchIntegrations();
+      } else {
+        toast.info(
+          "Tidak ada pesanan baru berstatus diserahkan ke kurir (SHIPPED) yang perlu diproses.",
+          { id: toastId, duration: 4000 }
+        );
+      }
+    } catch (err) {
+      toast.error(
+        `Gagal Sinkronisasi Pesanan: ${err instanceof Error ? err.message : "Terjadi kesalahan"}`,
+        { id: toastId, duration: 6000 }
+      );
+    } finally {
+      setSyncingOrders(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header section */}
@@ -195,7 +238,16 @@ export function IntegrationsView() {
             Sinkronisasi stok dua arah antara gudang fisik WPOS dan toko online Shopee.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncShippedOrders}
+            disabled={syncingOrders || loading}
+          >
+            <TruckIcon className={`mr-2 h-4 w-4 ${syncingOrders ? "animate-pulse" : ""}`} />
+            {syncingOrders ? "Memproses..." : "Cek Pesanan Terkirim"}
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -224,9 +276,9 @@ export function IntegrationsView() {
           <div className="text-xs space-y-1 text-muted-foreground">
             <p className="font-semibold text-foreground">Ketentuan Sinkronisasi Otomatis:</p>
             <ul className="list-disc list-inside space-y-0.5">
-              <li>1 Toko Shopee dipetakan secara eksklusif ke 1 Gudang.</li>
-              <li>Penjualan di POS langsung memotong stok di Shopee (pencocokan SKU).</li>
-              <li>Pesanan dari Shopee hanya memotong stok gudang POS setelah diserahkan ke kurir (Status: SHIPPED).</li>
+              <li>1 Toko Shopee dipetakan ke 1 Gudang (1 Gudang dapat melayani beberapa Toko Shopee).</li>
+              <li>Penjualan di POS langsung memotong stok di seluruh toko Shopee yang terhubung (pencocokan SKU).</li>
+              <li>Pesanan dari Shopee memotong stok gudang POS setelah diserahkan ke kurir (Status: SHIPPED).</li>
             </ul>
           </div>
         </CardContent>
@@ -297,9 +349,11 @@ export function IntegrationsView() {
                       <div className="flex items-center gap-2 min-w-[200px]">
                         <WarehouseIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                         <Select
-                          defaultValue={item.warehouseId || undefined}
+                          value={item.warehouseId || "none"}
                           onValueChange={(val) => {
-                            if (val) handleWarehouseChange(item.id, val);
+                            if (val && val !== (item.warehouseId || "none")) {
+                              handleWarehouseChange(item.id, val);
+                            }
                           }}
                           disabled={updatingId === item.id}
                         >
@@ -307,6 +361,9 @@ export function IntegrationsView() {
                             <SelectValue placeholder="Pilih Gudang" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="none" className="text-xs text-muted-foreground italic">
+                              -- Belum Dipetakan (Tanpa Gudang) --
+                            </SelectItem>
                             {warehouses.map((wh) => (
                               <SelectItem key={wh.id} value={wh.id} className="text-xs">
                                 {wh.name} {wh.code ? `(${wh.code})` : ""}

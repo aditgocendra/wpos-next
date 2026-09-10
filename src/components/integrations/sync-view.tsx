@@ -23,6 +23,8 @@ interface SyncResultItem {
   isLinked: boolean;
   localProductName: string | null;
   syncStatus: string;
+  stockAdjusted?: boolean;
+  warehouseStock?: number | null;
 }
 
 interface SyncViewProps {
@@ -83,6 +85,7 @@ export function SyncView({ integrationId }: SyncViewProps) {
     let localProcessed = 0;
     let localLinked = 0;
     let localUnlinked = 0;
+    let localStockAdjusted = 0;
 
     try {
       while (hasMore && !cancelRef.current) {
@@ -124,6 +127,7 @@ export function SyncView({ integrationId }: SyncViewProps) {
         batchResults.forEach((it) => {
           if (it.isLinked) localLinked++;
           else localUnlinked++;
+          if (it.stockAdjusted) localStockAdjusted++;
         });
 
         setLinkedCount(localLinked);
@@ -137,10 +141,20 @@ export function SyncView({ integrationId }: SyncViewProps) {
       if (!cancelRef.current) {
         setIsFinished(true);
         setProgressPercent(100);
-        toast.success(`Sinkronisasi produk selesai! ${localProcessed} produk diproses.`);
+        const stockInfo =
+          localStockAdjusted > 0
+            ? ` dan ${localStockAdjusted} stok varian berhasil disesuaikan ke Shopee`
+            : "";
+        toast.success(
+          `Sinkronisasi Selesai! ${localProcessed} produk diproses (${localLinked} terhubung${stockInfo}).`,
+          { duration: 5000 }
+        );
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sinkronisasi terhenti");
+      toast.error(
+        `Sinkronisasi Gagal: ${err instanceof Error ? err.message : "Terjadi kesalahan saat proses sinkronisasi"}`,
+        { duration: 6000 }
+      );
     } finally {
       setIsRunning(false);
     }
@@ -297,13 +311,25 @@ export function SyncView({ integrationId }: SyncViewProps) {
                       <p className="font-mono text-[11px] text-muted-foreground">
                         SKU: {log.sku}{" "}
                         {log.localProductName && `• Lokal: ${log.localProductName}`}
+                        {log.stockAdjusted && log.warehouseStock !== null && (
+                          <span className="text-emerald-600 font-semibold ml-1">
+                            • Stok Disinkron: {log.warehouseStock}
+                          </span>
+                        )}
                       </p>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {log.isLinked ? (
-                        <Badge variant="outline" className="text-emerald-600 border-emerald-300">
-                          <CheckIcon className="h-3 w-3 mr-1" /> Terhubung
-                        </Badge>
+                        <>
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-300">
+                            <CheckIcon className="h-3 w-3 mr-1" /> Terhubung
+                          </Badge>
+                          {log.stockAdjusted && (
+                            <Badge className="bg-[#EE4D2D] hover:bg-[#d73211] text-white text-[10px] px-1.5 py-0">
+                              Stok Disinkron
+                            </Badge>
+                          )}
+                        </>
                       ) : (
                         <Badge variant="secondary" className="text-amber-700 bg-amber-50">
                           SKU Baru
