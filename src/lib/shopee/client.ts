@@ -298,3 +298,125 @@ export function verifyShopeeWebhookSignature(
 
   return computedSignature.toLowerCase() === signatureHeader.toLowerCase();
 }
+
+export interface AppPushConfig {
+  callback_url?: string;
+  live_push_status?: "Normal" | "Warning" | "Suspended" | string;
+  suspended_time?: number;
+  blocked_shop_id?: number[];
+  push_config_on_list?: number[];
+  push_config_off_list?: number[];
+}
+
+export interface GetAppPushConfigResponse {
+  error?: string;
+  message?: string;
+  response?: AppPushConfig;
+  request_id?: string;
+}
+
+export interface SetAppPushConfigParams {
+  callback_url?: string;
+  set_push_config_on?: number[];
+  set_push_config_off?: number[];
+  blocked_shop_id_list?: number[];
+}
+
+export interface SetAppPushConfigResponse {
+  error?: string;
+  message?: string;
+  response?: {
+    result?: string;
+  };
+  request_id?: string;
+}
+
+/**
+ * Mengambil konfigurasi push notification (webhook) aplikasi saat ini dari Shopee
+ * Menggunakan endpoint /api/v2/push/get_app_push_config (Partner Level API)
+ */
+export async function getAppPushConfig(): Promise<GetAppPushConfigResponse> {
+  const env = getShopeeEnvConfig();
+
+  if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+    throw new Error(
+      "SHOPEE_PARTNER_ID tidak ditemukan atau tidak valid di environment variables."
+    );
+  }
+
+  if (!env.partnerKey) {
+    throw new Error(
+      "SHOPEE_PARTNER_KEY tidak ditemukan di environment variables."
+    );
+  }
+
+  const path = "/api/v2/push/get_app_push_config";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const baseString = `${env.partnerId}${path}${timestamp}`;
+  const sign = crypto
+    .createHmac("sha256", env.partnerKey)
+    .update(baseString)
+    .digest("hex");
+
+  const url = new URL(`${env.baseDomain}${path}`);
+  url.searchParams.append("partner_id", env.partnerId.toString());
+  url.searchParams.append("timestamp", timestamp.toString());
+  url.searchParams.append("sign", sign);
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    cache: "no-store",
+  });
+
+  const data = await res.json();
+  return data;
+}
+
+/**
+ * Mengatur atau memperbarui callback URL dan konfigurasi push notification di Shopee
+ * Menggunakan endpoint /api/v2/push/set_app_push_config (Partner Level API)
+ */
+export async function setAppPushConfig(
+  params: SetAppPushConfigParams
+): Promise<SetAppPushConfigResponse> {
+  const env = getShopeeEnvConfig();
+
+  if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+    throw new Error(
+      "SHOPEE_PARTNER_ID tidak ditemukan atau tidak valid di environment variables."
+    );
+  }
+
+  if (!env.partnerKey) {
+    throw new Error(
+      "SHOPEE_PARTNER_KEY tidak ditemukan di environment variables."
+    );
+  }
+
+  const path = "/api/v2/push/set_app_push_config";
+  const timestamp = Math.floor(Date.now() / 1000);
+  const baseString = `${env.partnerId}${path}${timestamp}`;
+  const sign = crypto
+    .createHmac("sha256", env.partnerKey)
+    .update(baseString)
+    .digest("hex");
+
+  const url = new URL(`${env.baseDomain}${path}`);
+  url.searchParams.append("partner_id", env.partnerId.toString());
+  url.searchParams.append("timestamp", timestamp.toString());
+  url.searchParams.append("sign", sign);
+
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(params),
+  });
+
+  const data = await res.json();
+  return data;
+}

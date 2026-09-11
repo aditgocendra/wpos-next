@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ShopeePushConfigCard } from "./shopee-push-config-card";
 import {
   Table,
   TableBody,
@@ -441,6 +442,9 @@ export function IntegrationsView() {
           )}
         </CardContent>
       </Card>
+
+      {/* Shopee Push Mechanism (Webhook) Config Section */}
+      <ShopeePushConfigCard />
 
       {/* Confirmation Dialog for Disconnecting Store */}
       <AlertDialog
