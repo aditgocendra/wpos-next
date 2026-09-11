@@ -112,7 +112,11 @@ export function IntegrationsView() {
   const handleConnectShopee = async () => {
     try {
       setConnecting(true);
-      const res = await fetch("/api/shopee/auth?action=get_auth_url");
+      const currentOrigin = typeof window !== "undefined" ? window.location.origin : "";
+      const redirectParam = currentOrigin
+        ? `&redirect=${encodeURIComponent(`${currentOrigin}/api/shopee/auth`)}`
+        : "";
+      const res = await fetch(`/api/shopee/auth?action=get_auth_url${redirectParam}`);
       const data = await res.json();
       if (res.ok && data.url) {
         window.location.href = data.url;

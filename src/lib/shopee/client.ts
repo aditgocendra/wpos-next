@@ -55,10 +55,10 @@ export function getShopeeEnvConfig(): ShopeeEnvConfig {
     .trim();
 
   if (!redirectUrl) {
-    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-      redirectUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api/shopee/auth`;
-    } else if (process.env.VERCEL_URL) {
+    if (process.env.VERCEL_URL) {
       redirectUrl = `https://${process.env.VERCEL_URL}/api/shopee/auth`;
+    } else if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      redirectUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api/shopee/auth`;
     } else if (process.env.NEXTAUTH_URL) {
       redirectUrl = `${process.env.NEXTAUTH_URL}/api/shopee/auth`;
     } else {
