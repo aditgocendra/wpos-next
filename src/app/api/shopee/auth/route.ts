@@ -34,13 +34,26 @@ export async function GET(req: NextRequest) {
       }
 
       const redirectQuery = searchParams.get("redirect");
-      let targetRedirect = redirectQuery || env.redirectUrl;
-
-      // Jika env.redirectUrl belum di-set eksplisit di env dan diakses dari domain non-localhost (misal Vercel preview)
       const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
       const proto = req.headers.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
-      if (!process.env.SHOPEE_REDIRECT_URL && host && !host.includes("localhost") && !redirectQuery) {
+
+      let targetRedirect = "";
+      if (redirectQuery) {
+        // 1. Prioritaskan redirect eksplisit dari frontend (window.location.origin)
+        targetRedirect = redirectQuery;
+      } else if (env.isUat && host && !host.includes("localhost")) {
+        // 2. Jika dalam mode non-production / preview, SELALU gunakan host deployment saat ini
+        // agar tidak nyasar ke preview URL deployment sebelumnya
         targetRedirect = `${proto}://${host}/api/shopee/auth`;
+      } else if (process.env.SHOPEE_REDIRECT_URL) {
+        // 3. Jika diset manual di env dan dalam mode production
+        targetRedirect = process.env.SHOPEE_REDIRECT_URL.trim();
+      } else if (host && !host.includes("localhost")) {
+        // 4. Fallback host dinamis
+        targetRedirect = `${proto}://${host}/api/shopee/auth`;
+      } else {
+        // 5. Fallback config
+        targetRedirect = env.redirectUrl;
       }
 
       const authUrl = generateShopeeAuthUrl(targetRedirect);
