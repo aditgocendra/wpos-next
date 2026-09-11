@@ -27,6 +27,7 @@ import {
   DatabaseIcon,
   FileSpreadsheetIcon,
   ClipboardCheckIcon,
+  ShoppingBagIcon,
 } from "lucide-react"
 
 const allNavItems = [
@@ -91,7 +92,12 @@ const allNavItems = [
     icon: <DatabaseIcon />,
     roles: ["SUPER_ADMIN"],
   },
-
+  {
+    title: "E-Commerce",
+    url: "/integrations",
+    icon: <ShoppingBagIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

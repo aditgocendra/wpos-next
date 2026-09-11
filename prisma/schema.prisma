@@ -72,6 +72,7 @@ model Warehouse {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   productVariantStocks ProductVariantStock[]
+  integrations         Integration[]
 
   @@map("warehouses")
 }
@@ -98,6 +99,7 @@ model Product {
   transferItems    StockTransferItem[]
   transactionItems TransactionItem[]
   opnameItems      StockOpnameItem[]
+  integrations     ProductIntegration[]
 
   category Category @relation(fields: [categoryId], references: [id])
 
@@ -127,6 +129,7 @@ model ProductVariant {
   transactionItems TransactionItem[]
   opnameItems      StockOpnameItem[]
   warehouseStocks  ProductVariantStock[]
+  integrations     ProductIntegration[]
 
   createdById String
   updatedById String?
@@ -283,4 +286,59 @@ model StockOpnameItem {
   @@index([productId])
   @@index([variantId])
   @@map("stock_opname_items")
+}
+
+model Integration {
+  id           String    @id @default(cuid())
+  warehouseId  String?
+  platform     String    @default("SHOPEE")
+  shopId       String?   @unique
+  accessToken  String?
+  refreshToken String?
+  tokenExpire  DateTime?
+  status       String    @default("INACTIVE") // INACTIVE, ACTIVE
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  warehouse    Warehouse?           @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
+  products     ProductIntegration[]
+  syncJobs     SyncJob[]
+
+  @@map("integrations")
+}
+
+model ProductIntegration {
+  id              String   @id @default(cuid())
+  integrationId   String
+  productId       String?
+  variantId       String?
+  externalId      String   // Shopee item_id
+  externalModelId String?  // Shopee model_id
+  sku             String?
+  syncStatus      String   @default("SYNCED")
+  lastSync        DateTime @default(now())
+
+  integration     Integration     @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  product         Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([integrationId, externalId, externalModelId])
+  @@index([sku])
+  @@map("product_integrations")
+}
+
+model SyncJob {
+  id             String   @id @default(cuid())
+  integrationId  String
+  type           String   // PULL_PRODUCTS, PUSH_STOCK
+  status         String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  totalItems     Int      @default(0)
+  processedItems Int      @default(0)
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@map("sync_jobs")
 }

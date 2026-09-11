@@ -1,14 +1,15 @@
 # Product Requirements Document (PRD) - Warehouse & POS Integrated System (WPOS)
 
 ## 1. Project Overview
-**WPOS** adalah aplikasi manajemen stok multi-gudang yang terintegrasi dengan fitur Point of Sale (POS) untuk kasir. Aplikasi ini dirancang untuk menangani kompleksitas inventaris di beberapa lokasi dengan fokus pada akurasi perhitungan Harga Pokok Penjualan (HPP) menggunakan metode **Monthly Moving Average**.
+**WPOS v2** adalah aplikasi manajemen stok multi-gudang (Omnichannel) yang terintegrasi dengan fitur Point of Sale (POS) untuk kasir serta sistem Sinkronisasi E-Commerce (Shopee). Aplikasi ini dirancang untuk menangani kompleksitas inventaris di beberapa lokasi, menjaga sinkronisasi stok antara toko fisik dan toko online, dengan fokus pada akurasi perhitungan Harga Pokok Penjualan (HPP) menggunakan metode **Monthly Moving Average**.
 
 ## 2. Goals & Objectives
-- Sinkronisasi stok secara real-time di seluruh lokasi gudang.
+- Sinkronisasi stok secara real-time di seluruh lokasi gudang fisik dan toko online (Shopee).
 - Pengelolaan kategori produk secara hierarkis (multi-level).
 - Perhitungan HPP yang akurat dan konsisten per periode bulan.
 - Antarmuka POS yang dioptimalkan untuk kecepatan kerja kasir.
 - Keamanan data dengan pembatasan akses berdasarkan peran pengguna (RBAC).
+- Arsitektur sinkronisasi data besar yang tahan terhadap batas waktu (timeout) serverless (Vercel).
 
 ## 3. Target Audience & RBAC (Role-Based Access Control)
 - **Super Admin:** Akses penuh ke seluruh fitur, laporan konsolidasi, manajemen user, dan pengaturan sistem.
@@ -51,6 +52,12 @@
 - **Route Protection:** Middleware untuk membatasi akses URL berdasarkan role pengguna.
 - **Data Isolation:** Memastikan admin gudang/kasir hanya bisa melihat/mengelola data gudang mereka sendiri.
 
+### 4.7. E-Commerce Sync (Shopee Integration)
+- **1-to-1 Warehouse Mapping:** Setiap toko Shopee yang dihubungkan wajib dipetakan secara eksklusif ke satu Gudang (Warehouse) di sistem POS.
+- **Client-Driven Bulk Sync:** Sinkronisasi awal (Initial Sync) produk dari Shopee menggunakan strategi chunking yang dikendalikan oleh *client-side* untuk menghindari Vercel Timeout. Sinkronisasi dan pencocokan produk menggunakan **SKU**.
+- **POS to Shopee (Push Stock):** Setiap terjadi penjualan di POS, sistem secara asinkron (*background/non-blocking*) memotong stok produk yang berkesesuaian di Shopee.
+- **Shopee to POS (Pull Stock via Webhook):** Sistem menerima webhook dari Shopee. Stok gudang POS hanya akan dipotong ketika status pesanan Shopee berubah menjadi "Telah diserahkan ke jasa pengiriman" (`SHIPPED`).
+
 ## 5. Non-Functional Requirements
 - **Performance:** Pencarian produk di POS harus di bawah 200ms.
 - **Consistency:** Data stok harus akurat dan terlindungi dari race conditions (ACID compliant).
@@ -65,6 +72,7 @@
 - **Authentication:** NextAuth.js
 - **State Management:** Zustand (untuk logic POS)
 - **Deployment:** Vercel (CI/CD via GitHub)
+- **E-Commerce API:** Shopee Open API (dengan otentikasi HMAC-SHA256)
 
 ## 7. Arsitektur Kode & Separation of Concerns
 Sistem menggunakan alur eksekusi berlapis (layered architecture) di mana seluruh logika bisnis terisolasi di Service Layer dan teruji penuh melalui Unit Testing:
@@ -129,6 +137,15 @@ src/
 │       └── pos/
 │           └── checkout/
 │               └── route.ts
+│       └── shopee/
+│           ├── auth/
+│           │   └── route.ts
+│           ├── webhooks/
+│           │   └── orders/
+│           │       └── route.ts
+│           └── sync/
+│               └── products/
+│                   └── route.ts
 ├── components/                 <-- UI COMPONENTS LAYER
 │   ├── ui/                     <-- Reusable Primitives (Button, Input, Modal, Table)
 │   ├── auth/                   <-- Komponen Spesifik Auth

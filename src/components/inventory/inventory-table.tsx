@@ -55,8 +55,10 @@ import {
   ImageIcon,
   ZoomInIcon,
   CopyIcon,
+  ShoppingBagIcon,
 } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 import type { ProductItem } from "@/services/inventory.service";
 import type { CategoryItem } from "@/services/category.service";
 import { InventoryFormDialog } from "@/components/inventory/inventory-form-dialog";
@@ -117,6 +119,84 @@ export function InventoryTable() {
   const [bulkCopyDialogOpen, setBulkCopyDialogOpen] = React.useState(false);
 
   const [zoomImage, setZoomImage] = React.useState<{ src: string; title: string } | null>(null);
+  const [syncingProductId, setSyncingProductId] = React.useState<string | null>(null);
+  const [syncingVariantId, setSyncingVariantId] = React.useState<string | null>(null);
+
+  const handleSyncProductStock = async (prod: ProductItem) => {
+    const toastId = toast.loading(`Menyinkronkan stok produk "${prod.name}" ke Shopee...`);
+    try {
+      setSyncingProductId(prod.id);
+      const res = await fetch("/api/shopee/sync/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: prod.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal sinkronisasi stok ke Shopee");
+
+      if (data.pushedCount > 0) {
+        toast.success(
+          `Sinkronisasi Selesai! Stok produk "${prod.name}" berhasil diperbarui ke Shopee (${data.pushedCount} varian disinkronkan).`,
+          { id: toastId, duration: 4000 }
+        );
+      } else {
+        toast.warning(
+          `Sinkronisasi Selesai: Tidak ada stok varian yang diperbarui. Pastikan SKU produk sudah terhubung ke Shopee dan gudang telah ditentukan.`,
+          { id: toastId, duration: 5000 }
+        );
+      }
+    } catch (err) {
+      toast.error(
+        `Sinkronisasi Stok Gagal: ${err instanceof Error ? err.message : "Terjadi kesalahan saat menyinkronkan stok ke Shopee"}`,
+        { id: toastId, duration: 6000 }
+      );
+    } finally {
+      setSyncingProductId(null);
+    }
+  };
+
+  const handleSyncVariantStock = async (
+    variantId: string,
+    productName: string,
+    variantName: string
+  ) => {
+    const toastId = toast.loading(
+      `Menyinkronkan stok varian "${productName} (${variantName})" ke Shopee...`
+    );
+    try {
+      setSyncingVariantId(variantId);
+      const res = await fetch("/api/shopee/sync/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variantId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal sinkronisasi stok varian ke Shopee");
+
+      if (data.pushedCount > 0) {
+        toast.success(
+          `Sinkronisasi Selesai! Stok varian "${productName} (${variantName})" berhasil diperbarui ke Shopee.`,
+          { id: toastId, duration: 4000 }
+        );
+      } else {
+        toast.warning(
+          `Sinkronisasi Selesai: Varian "${productName} (${variantName})" belum terhubung ke toko Shopee atau gudang belum dipetakan.`,
+          { id: toastId, duration: 5000 }
+        );
+      }
+    } catch (err) {
+      toast.error(
+        `Sinkronisasi Stok Gagal: ${err instanceof Error ? err.message : "Terjadi kesalahan saat menyinkronkan stok varian ke Shopee"}`,
+        { id: toastId, duration: 6000 }
+      );
+    } finally {
+      setSyncingVariantId(null);
+    }
+  };
 
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
@@ -399,6 +479,22 @@ export function InventoryTable() {
           const prod = row.original;
           return (
             <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-[#EE4D2D] hover:bg-[#EE4D2D]/10"
+                title="Sinkronkan Stok ke Shopee"
+                disabled={syncingProductId === prod.id}
+                onClick={() => handleSyncProductStock(prod)}
+              >
+                <ShoppingBagIcon
+                  className={cn(
+                    "size-4 text-[#EE4D2D]",
+                    syncingProductId === prod.id && "animate-spin"
+                  )}
+                />
+                <span className="sr-only">Sync Stok Shopee</span>
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -755,12 +851,35 @@ export function InventoryTable() {
                                         <span className="font-semibold text-xs text-foreground truncate">
                                           {variant.variantName}
                                         </span>
-                                        <Badge
-                                          variant="outline"
-                                          className="font-mono text-[10px] font-bold px-1.5 py-0 bg-primary/5 text-primary border-primary/20"
-                                        >
-                                          {variant.sku}
-                                        </Badge>
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-6 text-muted-foreground hover:text-[#EE4D2D] hover:bg-[#EE4D2D]/10"
+                                            title="Sinkronkan stok varian ini ke Shopee"
+                                            disabled={syncingVariantId === variant.id}
+                                            onClick={() =>
+                                              handleSyncVariantStock(
+                                                variant.id,
+                                                row.original.name,
+                                                variant.variantName
+                                              )
+                                            }
+                                          >
+                                            <ShoppingBagIcon
+                                              className={cn(
+                                                "size-3 text-[#EE4D2D]",
+                                                syncingVariantId === variant.id && "animate-spin"
+                                              )}
+                                            />
+                                          </Button>
+                                          <Badge
+                                            variant="outline"
+                                            className="font-mono text-[10px] font-bold px-1.5 py-0 bg-primary/5 text-primary border-primary/20"
+                                          >
+                                            {variant.sku}
+                                          </Badge>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
