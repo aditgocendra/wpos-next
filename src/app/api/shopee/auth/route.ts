@@ -13,6 +13,26 @@ export async function GET(req: NextRequest) {
 
     // 1. Jika request meminta URL otentikasi Shopee
     if (action === "get_auth_url") {
+      if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+        return NextResponse.json(
+          {
+            error:
+              "SHOPEE_PARTNER_ID tidak terbaca atau belum diset di Environment Variables Vercel. Pastikan SHOPEE_PARTNER_ID sudah diisi dengan angka Partner ID yang benar.",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (!env.partnerKey) {
+        return NextResponse.json(
+          {
+            error:
+              "SHOPEE_PARTNER_KEY tidak ditemukan di Environment Variables Vercel. Pastikan SHOPEE_PARTNER_KEY sudah dikonfigurasi.",
+          },
+          { status: 400 }
+        );
+      }
+
       const redirectQuery = searchParams.get("redirect");
       let targetRedirect = redirectQuery || env.redirectUrl;
 

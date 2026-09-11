@@ -10,37 +10,54 @@ export interface ShopeeEnvConfig {
   partnerKey: string;
   redirectUrl: string;
   isUat: boolean;
+  baseDomain: string;
 }
 
 export function getShopeeEnvConfig(): ShopeeEnvConfig {
-  // Bersihkan tanda kutip (quotes), spasi, atau karakter non-digit dari SHOPEE_PARTNER_ID
+  // Ambil partner ID dari process.env (dukung berbagai variasi nama env var)
   const rawPartnerId = (
     process.env.SHOPEE_PARTNER_ID ||
+    process.env.PARTNER_ID ||
+    process.env.SHOPEE_PARTNERID ||
     process.env.NEXT_PUBLIC_SHOPEE_PARTNER_ID ||
+    process.env.NEXT_PUBLIC_PARTNER_ID ||
+    process.env.NEXT_PUBLIC_SHOPEE_PARTNERID ||
     ""
   )
+    .toString()
     .replace(/['"\s]/g, "")
     .trim();
 
-  let partnerId = parseInt(rawPartnerId, 10);
-  // Jika partnerId tidak valid / 0 / NaN di environment Vercel, gunakan default fallback sandbox partner
-  if (isNaN(partnerId) || partnerId <= 0) {
-    partnerId = 1233334;
-  }
+  const partnerId = rawPartnerId ? parseInt(rawPartnerId, 10) : 0;
 
-  // Bersihkan partnerKey dari kutip atau spasi
-  let partnerKey = (process.env.SHOPEE_PARTNER_KEY || "")
+  // Ambil partner key dari process.env (dukung berbagai variasi nama env var)
+  const partnerKey = (
+    process.env.SHOPEE_PARTNER_KEY ||
+    process.env.PARTNER_KEY ||
+    process.env.SHOPEE_PARTNERKEY ||
+    process.env.NEXT_PUBLIC_SHOPEE_PARTNER_KEY ||
+    process.env.NEXT_PUBLIC_PARTNER_KEY ||
+    process.env.NEXT_PUBLIC_SHOPEE_PARTNERKEY ||
+    ""
+  )
+    .toString()
     .replace(/['"\s]/g, "")
     .trim();
 
-  if (!partnerKey) {
-    partnerKey = "shpk6a53575375764a744361785a41557569777753544849437954484274666e";
-  }
-  
   // Deteksi redirect URL dengan fallback ke VERCEL_URL atau NEXTAUTH_URL jika tidak diset
-  let redirectUrl = (process.env.SHOPEE_REDIRECT_URL || "").replace(/['"\s]/g, "").trim();
+  let redirectUrl = (
+    process.env.SHOPEE_REDIRECT_URL ||
+    process.env.NEXT_PUBLIC_SHOPEE_REDIRECT_URL ||
+    ""
+  )
+    .toString()
+    .replace(/['"\s]/g, "")
+    .trim();
+
   if (!redirectUrl) {
-    if (process.env.VERCEL_URL) {
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+      redirectUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}/api/shopee/auth`;
+    } else if (process.env.VERCEL_URL) {
       redirectUrl = `https://${process.env.VERCEL_URL}/api/shopee/auth`;
     } else if (process.env.NEXTAUTH_URL) {
       redirectUrl = `${process.env.NEXTAUTH_URL}/api/shopee/auth`;
@@ -49,22 +66,50 @@ export function getShopeeEnvConfig(): ShopeeEnvConfig {
     }
   }
 
-  // Deteksi environment UAT / Sandbox
-  const uatEnvVal = (process.env.SHOPEE_IS_UAT || "").replace(/['"\s]/g, "").toLowerCase();
-  const envVal = (process.env.SHOPEE_ENV || "").replace(/['"\s]/g, "").toLowerCase();
-  const isUat =
-    uatEnvVal === "true" ||
-    uatEnvVal === "1" ||
-    uatEnvVal === "yes" ||
-    envVal === "sandbox" ||
-    envVal === "uat" ||
-    partnerId === 1233334;
+  // Deteksi environment mode dari process.env:
+  // VERCEL_ENV: 'production' | 'preview' | 'development'
+  // NODE_ENV: 'production' | 'development' | 'test'
+  const vercelEnv = (process.env.VERCEL_ENV || "").trim().toLowerCase();
+  const nodeEnv = (process.env.NODE_ENV || "").trim().toLowerCase();
+  const appEnv = (process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV || "").trim().toLowerCase();
+  const shopeeEnv = (process.env.SHOPEE_ENV || "").trim().toLowerCase();
+  const shopeeIsUat = (process.env.SHOPEE_IS_UAT || "").trim().toLowerCase();
+
+  const isExplicitSandbox =
+    shopeeIsUat === "true" ||
+    shopeeIsUat === "1" ||
+    shopeeIsUat === "yes" ||
+    shopeeEnv === "sandbox" ||
+    shopeeEnv === "uat" ||
+    shopeeEnv === "test";
+
+  // Hanya mode production jika:
+  // 1. Tidak di-set eksplisit ke sandbox / uat
+  // 2. Di Vercel: VERCEL_ENV harus 'production' (jika 'preview' atau 'development', maka BUKAN production)
+  // 3. Di luar Vercel: NODE_ENV harus 'production' (dan APP_ENV bukan preview/development/staging)
+  // 4. SHOPEE_ENV bukan 'sandbox' atau 'uat'
+  const isProduction =
+    !isExplicitSandbox &&
+    (vercelEnv ? vercelEnv === "production" : (nodeEnv === "production" && appEnv !== "preview" && appEnv !== "staging" && appEnv !== "development")) &&
+    shopeeEnv !== "sandbox" &&
+    shopeeEnv !== "uat";
+
+  // Jika bukan mode production maka mode UAT / Sandbox
+  const isUat = !isProduction;
+
+  // Base domain: jika bukan mode production maka gunakan https://openplatform.sandbox.test-stable.shopee.sg
+  const baseDomain =
+    process.env.SHOPEE_BASE_DOMAIN?.trim().replace(/\/+$/, "") ||
+    (isProduction
+      ? "https://partner.shopeemobile.com"
+      : "https://openplatform.sandbox.test-stable.shopee.sg");
 
   return {
     partnerId,
     partnerKey,
     redirectUrl,
     isUat,
+    baseDomain,
   };
 }
 
@@ -74,13 +119,24 @@ export function getShopeeEnvConfig(): ShopeeEnvConfig {
  */
 export function generateShopeeAuthUrl(redirectUrl: string): string {
   const env = getShopeeEnvConfig();
+
+  if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+    throw new Error(
+      "SHOPEE_PARTNER_ID tidak ditemukan atau tidak valid di environment variables. Pastikan SHOPEE_PARTNER_ID sudah dikonfigurasi di Vercel."
+    );
+  }
+
+  if (!env.partnerKey) {
+    throw new Error(
+      "SHOPEE_PARTNER_KEY tidak ditemukan di environment variables. Pastikan SHOPEE_PARTNER_KEY sudah dikonfigurasi di Vercel."
+    );
+  }
+
   const path = "/api/v2/shop/auth_partner";
   const timestamp = Math.floor(Date.now() / 1000);
 
-  // Menggunakan domain resmi Shopee v2
-  const baseDomain = env.isUat
-    ? "https://openplatform.sandbox.test-stable.shopee.sg"
-    : "https://partner.shopeemobile.com";
+  // Gunakan baseDomain sesuai hasil deteksi environment
+  const baseDomain = env.baseDomain;
 
   // Base string: partner_id + path + timestamp
   const baseString = `${env.partnerId}${path}${timestamp}`;
@@ -103,10 +159,24 @@ export function generateShopeeAuthUrl(redirectUrl: string): string {
  */
 export function getBaseShopeeSDK(): ShopeeSDK {
   const env = getShopeeEnvConfig();
+
+  if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+    throw new Error(
+      "SHOPEE_PARTNER_ID tidak ditemukan atau tidak valid di environment variables."
+    );
+  }
+
+  if (!env.partnerKey) {
+    throw new Error(
+      "SHOPEE_PARTNER_KEY tidak ditemukan di environment variables."
+    );
+  }
+
   const config: ShopeeConfig = {
     partner_id: Number(env.partnerId),
     partner_key: String(env.partnerKey),
     region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
+    base_url: `${env.baseDomain}/api/v2`,
   };
 
   return new ShopeeSDK(config);
@@ -126,6 +196,19 @@ export async function getShopeeClientForIntegration(integrationId: string): Prom
   }
 
   const env = getShopeeEnvConfig();
+
+  if (!env.partnerId || isNaN(env.partnerId) || env.partnerId <= 0) {
+    throw new Error(
+      "SHOPEE_PARTNER_ID tidak ditemukan atau tidak valid di environment variables."
+    );
+  }
+
+  if (!env.partnerKey) {
+    throw new Error(
+      "SHOPEE_PARTNER_KEY tidak ditemukan di environment variables."
+    );
+  }
+
   const shopIdNum = integration.shopId ? parseInt(integration.shopId, 10) : undefined;
 
   let currentAccessToken = integration.accessToken;
@@ -186,6 +269,7 @@ export async function getShopeeClientForIntegration(integrationId: string): Prom
     partner_key: String(env.partnerKey),
     shop_id: shopIdNum,
     region: env.isUat ? ShopeeRegion.TEST_GLOBAL : ShopeeRegion.GLOBAL,
+    base_url: `${env.baseDomain}/api/v2`,
   };
 
   return new ShopeeSDK(config, dbTokenStorage);

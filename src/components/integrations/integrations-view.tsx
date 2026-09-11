@@ -114,13 +114,13 @@ export function IntegrationsView() {
       setConnecting(true);
       const res = await fetch("/api/shopee/auth?action=get_auth_url");
       const data = await res.json();
-      if (data.url) {
+      if (res.ok && data.url) {
         window.location.href = data.url;
       } else {
-        toast.error("Gagal mendapatkan link otorisasi Shopee");
+        toast.error(data.error || "Gagal mendapatkan link otorisasi Shopee");
       }
-    } catch {
-      toast.error("Gagal memulai koneksi ke Shopee");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal memulai koneksi ke Shopee");
     } finally {
       setConnecting(false);
     }
@@ -409,17 +409,6 @@ export function IntegrationsView() {
                         >
                           <ExternalLinkIcon className="h-3.5 w-3.5 mr-1" />
                           Sync Produk
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 text-xs text-[#EE4D2D] border-orange-200 hover:bg-orange-50 hover:text-[#d73211] dark:border-orange-900 dark:hover:bg-orange-950/40"
-                          disabled={connecting}
-                          onClick={handleConnectShopee}
-                          title="Perbarui token otorisasi Shopee jika sesi kedaluwarsa"
-                        >
-                          <RefreshCwIcon className={`h-3.5 w-3.5 mr-1 ${connecting ? "animate-spin" : ""}`} />
-                          Hubungkan Ulang
                         </Button>
                         <Button
                           variant="ghost"
