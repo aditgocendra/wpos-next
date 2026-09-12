@@ -36,18 +36,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 2. Handle empty body (e.g. test push ping dari Shopee)
+    if (!rawBody || !rawBody.trim()) {
+      console.log("[Shopee Webhook] Received empty body (test ping acknowledged)");
+      return NextResponse.json({ code: 0, message: "OK (Ping acknowledged)" });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let payload: any = {};
     try {
       payload = JSON.parse(rawBody);
     } catch {
-      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+      console.warn("[Shopee Webhook] Non-JSON payload received:", rawBody);
+      // Selalu respon 200 agar test push / handshake Shopee tidak gagal
+      return NextResponse.json({ code: 0, message: "Payload acknowledged" });
     }
 
     const eventCode = Number(payload.code);
     const shopId = String(payload.shop_id || payload.data?.shop_id || "").trim();
 
     console.log(`[Shopee Webhook] Received Event Code ${eventCode} for shopId ${shopId || "N/A"}`);
+
+    // Test event code atau handshake ping
+    if (eventCode === 0 || payload.test || payload.msg === "test") {
+      console.log("[Shopee Webhook] Test push event acknowledged:", payload);
+      return NextResponse.json({ code: 0, message: "Test push acknowledged successfully" });
+    }
 
     // Handler berdasarkan event code Shopee:
     // Code 1: Shop authorization for partners

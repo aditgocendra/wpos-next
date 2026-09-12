@@ -85,9 +85,20 @@ export async function POST(req: NextRequest) {
     });
 
     if (result.error) {
+      let friendlyError = result.message || result.error;
+      const callbackStr = callback_url ? String(callback_url) : "";
+      if (
+        typeof friendlyError === "string" &&
+        friendlyError.includes("test push to this call back url")
+      ) {
+        if (callbackStr.includes("localhost") || callbackStr.includes("127.0.0.1")) {
+          friendlyError = `${friendlyError} | Catatan: Server cloud Shopee tidak dapat mengakses 'localhost' atau IP lokal. Untuk pengujian di komputer lokal, gunakan tunnel HTTPS publik (seperti ngrok/Cloudflare tunnel) atau gunakan domain live.`;
+        }
+      }
+
       return NextResponse.json(
         {
-          error: result.message || result.error,
+          error: friendlyError,
           details: result,
         },
         { status: 400 }

@@ -124,9 +124,19 @@ export function ShopeePushConfigCard() {
 
   const handleUseCurrentAppUrl = () => {
     if (typeof window !== "undefined") {
+      const isLocal =
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
       const suggested = `${window.location.origin}/api/shopee/webhook`;
       setCallbackUrl(suggested);
-      toast.info("Callback URL disesuaikan dengan domain aktif saat ini.");
+      if (isLocal) {
+        toast.warning(
+          "Catatan: Shopee mengirim test push dari cloud dan tidak dapat menjangkau 'localhost'. Untuk testing lokal, gunakan tunnel publik HTTPS seperti ngrok.",
+          { duration: 6000 }
+        );
+      } else {
+        toast.info("Callback URL disesuaikan dengan domain aktif saat ini.");
+      }
     }
   };
 
@@ -157,8 +167,17 @@ export function ShopeePushConfigCard() {
       return;
     }
 
-    if (!trimmed.startsWith("https://") && !trimmed.startsWith("http://localhost")) {
-      toast.error("Callback URL harus menggunakan protokol HTTPS (misal: https://...) sesuai syarat Shopee.");
+    const isLocal = trimmed.includes("localhost") || trimmed.includes("127.0.0.1");
+    if (isLocal) {
+      toast.error(
+        "Server Shopee tidak dapat mengakses 'localhost' untuk melakukan test push. Gunakan tunneling HTTPS (misal: ngrok http 3000) atau domain publik.",
+        { duration: 7000 }
+      );
+      return;
+    }
+
+    if (!trimmed.startsWith("https://")) {
+      toast.error("Callback URL harus menggunakan protokol HTTPS (contoh: https://...) sesuai syarat Shopee.");
       return;
     }
 
@@ -323,8 +342,22 @@ export function ShopeePushConfigCard() {
               {saving ? "Menyimpan..." : "Simpan ke Shopee"}
             </Button>
           </div>
+          {(callbackUrl.includes("localhost") || callbackUrl.includes("127.0.0.1")) && (
+            <div className="p-2.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[11px] text-amber-800 dark:text-amber-200 flex items-start gap-2">
+              <AlertTriangleIcon className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-semibold">Localhost terdeteksi:</p>
+                <p>
+                  Shopee mengirimkan <em>test push</em> langsung dari server internet Shopee. Server Shopee tidak dapat menghubungi <code className="px-1 py-0.5 rounded bg-amber-100 dark:bg-amber-900 font-mono text-[10px]">localhost</code>.
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Solusi: Jalankan tunnel publik seperti <strong>ngrok</strong> (<code className="font-mono">ngrok http 3000</code>) atau Cloudflare Tunnel, lalu gunakan URL HTTPS publik yang dihasilkan (misal: <code className="font-mono text-[10px]">https://xxxx.ngrok-free.app/api/shopee/webhook</code>).
+                </p>
+              </div>
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground">
-            Shopee Open Platform mewajibkan protokol HTTPS dengan respon HTTP 200 cepat (&lt; 5 detik).
+            Shopee Open Platform mewajibkan protokol HTTPS dengan respon HTTP 200 cepat (&lt; 3 detik).
           </p>
         </div>
 

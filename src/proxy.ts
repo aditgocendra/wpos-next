@@ -10,7 +10,7 @@ export async function proxy(req: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/setup") ||
     pathname.startsWith("/api/shopee/auth") ||
-    pathname.startsWith("/api/shopee/webhooks") ||
+    pathname.startsWith("/api/shopee/webhook") ||
     pathname === "/setup" ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
