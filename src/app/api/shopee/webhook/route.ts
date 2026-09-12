@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
             fullUrl, 
             signature,
             rawBody, // Tambahkan rawBody untuk melihat apakah ada perbedaan spasi/karakter
-            partnerKeyLength: env.partnerKey?.length
+            partnerKeyLength: process.env.SHOPEE_PARTNER_KEY?.length
           });
           
           // Tolak request dengan 401 secara tegas (Bypass ditiadakan sesuai permintaan)
