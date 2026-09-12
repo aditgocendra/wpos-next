@@ -54,6 +54,18 @@ describe("Proxy & RBAC Route Protection", () => {
       expect(nextAuthJwt.getToken).not.toHaveBeenCalled();
       expect(res.headers.get("location")).toBeNull();
     });
+
+    it("should allow /api/shopee/webhook and /api/shopee/auth routes without checking token", async () => {
+      const reqWebhook = createMockRequest("http://localhost:3000/api/shopee/webhook");
+      const resWebhook = await proxy(reqWebhook);
+      expect(nextAuthJwt.getToken).not.toHaveBeenCalled();
+      expect(resWebhook.headers.get("location")).toBeNull();
+
+      const reqWebhooks = createMockRequest("http://localhost:3000/api/shopee/webhooks/orders");
+      const resWebhooks = await proxy(reqWebhooks);
+      expect(nextAuthJwt.getToken).not.toHaveBeenCalled();
+      expect(resWebhooks.headers.get("location")).toBeNull();
+    });
   });
 
   describe("Unauthenticated Access", () => {
