@@ -56,7 +56,13 @@ export async function POST(req: NextRequest) {
         if (!isValid) isValid = verifyShopeeWebhookSignature(fullUrl + "/", rawBody, signature);
         
         if (!isValid && process.env.NODE_ENV === "production") {
-          console.warn("[Shopee Webhook] Signature tidak valid:", { url, fullUrl, signature });
+          console.warn("[Shopee Webhook] Signature tidak valid (DEBUG DETAIL):", { 
+            url, 
+            fullUrl, 
+            signature,
+            rawBody, // Tambahkan rawBody untuk melihat apakah ada perbedaan spasi/karakter
+            partnerKeyLength: env.partnerKey?.length
+          });
           
           // Tolak request dengan 401 secara tegas (Bypass ditiadakan sesuai permintaan)
           return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
