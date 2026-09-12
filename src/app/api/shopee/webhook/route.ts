@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
       const isHandedOver =
         orderStatus === "SHIPPED" ||
         logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
+        logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
         logisticsStatus === "LOGISTICS_SHIPPED" ||
         (orderStatus === "PROCESSED" && eventCode === 3);
 
