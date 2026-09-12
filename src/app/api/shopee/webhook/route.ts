@@ -64,8 +64,11 @@ export async function POST(req: NextRequest) {
             partnerKeyLength: process.env.SHOPEE_PARTNER_KEY?.length
           });
           
-          // Tolak request dengan 401 secara tegas (Bypass ditiadakan sesuai permintaan)
-          return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+          if (!isTestPush) {
+            // Tolak request dengan 401 jika bukan test push
+            return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+          }
+          console.warn("[Shopee Webhook] Bypassing invalid signature because it is a test push.");
         }
       }
     }
@@ -75,6 +78,12 @@ export async function POST(req: NextRequest) {
     // 4. Test event code atau handshake ping
     if (isTestPush) {
       console.log("[Shopee Webhook] Test push event acknowledged:", payload);
+      
+      // Syarat mutlak Shopee: Jika payload mengandung verify_info, kita HARUS membalas dengan verify_info tersebut!
+      if (payload.data && payload.data.verify_info) {
+        return NextResponse.json({ verify_info: payload.data.verify_info });
+      }
+      
       return NextResponse.json({ code: 0, message: "Test push acknowledged successfully" });
     }
 
