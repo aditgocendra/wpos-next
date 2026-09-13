@@ -13,6 +13,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Gunakan req.text() untuk mendapatkan raw body string secara aman di Next.js App Router
     const rawBody = await req.text();
     const signature = req.headers.get("authorization") || req.headers.get("Authorization") || "";
     const url = req.nextUrl.toString();
@@ -40,21 +41,40 @@ export async function POST(req: NextRequest) {
 
     // 3. Verifikasi Signature Shopee jika signature disertakan
     if (signature) {
-      const isValidDirect = verifyShopeeWebhookSignature(url, rawBody, signature);
-      if (!isValidDirect) {
-        // Cek dengan forwarded host jika di balik reverse proxy / Vercel
-        const forwardedProto =
-          req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
-        const forwardedHost =
-          req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
-        const fullUrl = `${forwardedProto}://${forwardedHost}${req.nextUrl.pathname}${req.nextUrl.search}`;
-        const isValidForwarded = verifyShopeeWebhookSignature(fullUrl, rawBody, signature);
+      let isValid = verifyShopeeWebhookSignature(url, rawBody, signature);
+      
+      // Jika url bawaan gagal, coba variasi dengan trailing slash
+      if (!isValid) isValid = verifyShopeeWebhookSignature(url + "/", rawBody, signature);
 
-        if (!isValidForwarded && process.env.NODE_ENV === "production") {
-          console.warn("[Shopee Webhook] Signature tidak valid:", { url, fullUrl, signature });
+      if (!isValid) {
+        // Cek dengan forwarded host jika di balik reverse proxy / Vercel
+        const forwardedProto = req.headers.get("x-forwarded-proto") || req.nextUrl.protocol.replace(":", "");
+        const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host") || req.nextUrl.host;
+        const fullUrl = `${forwardedProto}://${forwardedHost}${req.nextUrl.pathname}${req.nextUrl.search}`;
+        
+        isValid = verifyShopeeWebhookSignature(fullUrl, rawBody, signature);
+        if (!isValid) isValid = verifyShopeeWebhookSignature(fullUrl + "/", rawBody, signature);
+        
+        
+        // Cek juga jika ada environment variable khusus untuk URL webhook
+        const envWebhookUrl = process.env.SHOPEE_WEBHOOK_URL;
+        if (!isValid && envWebhookUrl) {
+          isValid = verifyShopeeWebhookSignature(envWebhookUrl, rawBody, signature);
+          if (!isValid) isValid = verifyShopeeWebhookSignature(envWebhookUrl + "/", rawBody, signature);
+        }
+
+        if (!isValid && process.env.NODE_ENV === "production") {
+          console.warn("[Shopee Webhook] Signature tidak valid (DEBUG DETAIL):", { 
+            url, 
+            fullUrl,
+            envWebhookUrl,
+            signature,
+            rawBody, // Tambahkan rawBody untuk melihat apakah ada perbedaan spasi/karakter
+            partnerKeyLength: process.env.SHOPEE_PARTNER_KEY?.length
+          });
           
-          // Jika ini BUKAN test push, tolak dengan 401
           if (!isTestPush) {
+            // Tolak request dengan 401 jika bukan test push
             return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
           }
           console.warn("[Shopee Webhook] Bypassing invalid signature because it is a test push.");
@@ -67,6 +87,12 @@ export async function POST(req: NextRequest) {
     // 4. Test event code atau handshake ping
     if (isTestPush) {
       console.log("[Shopee Webhook] Test push event acknowledged:", payload);
+      
+      // Syarat mutlak Shopee: Jika payload mengandung verify_info, kita HARUS membalas dengan verify_info tersebut!
+      if (payload.data && payload.data.verify_info) {
+        return NextResponse.json({ verify_info: payload.data.verify_info });
+      }
+      
       return NextResponse.json({ code: 0, message: "Test push acknowledged successfully" });
     }
 
@@ -123,6 +149,7 @@ export async function POST(req: NextRequest) {
       const isHandedOver =
         orderStatus === "SHIPPED" ||
         logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
+        logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
         logisticsStatus === "LOGISTICS_SHIPPED" ||
         (orderStatus === "PROCESSED" && eventCode === 3);
 
