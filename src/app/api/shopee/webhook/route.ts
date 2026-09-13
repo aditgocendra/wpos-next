@@ -13,8 +13,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const rawBodyBuffer = await req.arrayBuffer();
-    const rawBody = Buffer.from(rawBodyBuffer).toString("utf-8");
+    // Gunakan req.text() untuk mendapatkan raw body string secara aman di Next.js App Router
+    const rawBody = await req.text();
     const signature = req.headers.get("authorization") || req.headers.get("Authorization") || "";
     const url = req.nextUrl.toString();
 
@@ -55,10 +55,19 @@ export async function POST(req: NextRequest) {
         isValid = verifyShopeeWebhookSignature(fullUrl, rawBody, signature);
         if (!isValid) isValid = verifyShopeeWebhookSignature(fullUrl + "/", rawBody, signature);
         
+        
+        // Cek juga jika ada environment variable khusus untuk URL webhook
+        const envWebhookUrl = process.env.SHOPEE_WEBHOOK_URL;
+        if (!isValid && envWebhookUrl) {
+          isValid = verifyShopeeWebhookSignature(envWebhookUrl, rawBody, signature);
+          if (!isValid) isValid = verifyShopeeWebhookSignature(envWebhookUrl + "/", rawBody, signature);
+        }
+
         if (!isValid && process.env.NODE_ENV === "production") {
           console.warn("[Shopee Webhook] Signature tidak valid (DEBUG DETAIL):", { 
             url, 
-            fullUrl, 
+            fullUrl,
+            envWebhookUrl,
             signature,
             rawBody, // Tambahkan rawBody untuk melihat apakah ada perbedaan spasi/karakter
             partnerKeyLength: process.env.SHOPEE_PARTNER_KEY?.length
