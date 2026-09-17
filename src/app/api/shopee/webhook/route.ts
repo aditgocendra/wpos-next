@@ -73,11 +73,16 @@ export async function POST(req: NextRequest) {
             partnerKeyLength: process.env.SHOPEE_PARTNER_KEY?.length
           });
           
-          if (!isTestPush) {
+          if (!isTestPush && process.env.SHOPEE_BYPASS_SIGNATURE !== "true") {
             // Tolak request dengan 401 jika bukan test push
             return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+          } else if (process.env.SHOPEE_BYPASS_SIGNATURE === "true") {
+            console.warn("[Shopee Webhook] WARNING: Bypassing signature validation because SHOPEE_BYPASS_SIGNATURE=true");
           }
-          console.warn("[Shopee Webhook] Bypassing invalid signature because it is a test push.");
+          
+          if (isTestPush) {
+             console.warn("[Shopee Webhook] Bypassing invalid signature because it is a test push.");
+          }
         }
       }
     }
