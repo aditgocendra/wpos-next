@@ -4,11 +4,16 @@ import { NextRequest } from "next/server";
 import { shopeeSyncService } from "@/services/shopee-sync.service";
 import { prisma } from "@/lib/prisma";
 
-vi.mock("@/services/shopee-sync.service", () => ({
-  shopeeSyncService: {
-    processShippedOrder: vi.fn(),
-  },
-}));
+vi.mock("@/services/shopee-sync.service", () => {
+  const processShippedOrder = vi.fn();
+  return {
+    shopeeSyncService: {
+      processShippedOrder,
+      processOrderDeduction: processShippedOrder,
+      processCancelledOrder: vi.fn(),
+    },
+  };
+});
 
 vi.mock("@/lib/prisma", () => ({
   prisma: {
@@ -225,6 +230,56 @@ describe("Shopee Webhook Route Tests", () => {
     expect(prisma.integration.updateMany).toHaveBeenCalledWith({
       where: { shopId: "shop-999", platform: "SHOPEE" },
       data: { status: "ACTIVE", updatedAt: expect.any(Date) },
+    });
+  });
+
+  it("should restock warehouse stock and trigger shopeeSyncService.processCancelledOrder when order is CANCELLED", async () => {
+    vi.mocked(shopeeSyncService.processCancelledOrder).mockResolvedValue({
+      success: true,
+      message: "Stok berhasil dikembalikan untuk pesanan CANCELLED",
+      restocks: ["SKU-001 bertambah 2"],
+      syncedStoresCount: 2,
+    });
+
+    const payload = {
+      code: 3,
+      shop_id: "shop-123",
+      data: {
+        ordersn: "CANCEL-ORDER-12345",
+        status: "CANCELLED",
+        items: [
+          {
+            item_id: 111,
+            model_id: 222,
+            model_sku: "SKU-001",
+            model_quantity_purchased: 2,
+          },
+        ],
+      },
+    };
+
+    const req = new NextRequest("http://localhost:3000/api/shopee/webhook", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.code).toBe(0);
+    expect(data.restocks).toEqual(["SKU-001 bertambah 2"]);
+    expect(shopeeSyncService.processCancelledOrder).toHaveBeenCalledWith({
+      shopId: "shop-123",
+      orderSn: "CANCEL-ORDER-12345",
+      items: [
+        {
+          itemId: 111,
+          modelId: 222,
+          sku: "SKU-001",
+          quantity: 2,
+        },
+      ],
     });
   });
 });
