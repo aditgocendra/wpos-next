@@ -61,25 +61,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Aturan Bisnis:
-    // Potong stok saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
-    const shouldDeductStock =
-      orderStatus === "READY_TO_SHIP" ||
-      orderStatus === "PROCESSED" ||
-      orderStatus === "SHIPPED" ||
-      logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
-      logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
-      logisticsStatus === "LOGISTICS_SHIPPED" ||
-      (orderStatus === "CONFIRMED" && payload.code === 3);
-
-    if (!shouldDeductStock) {
-      return NextResponse.json({
-        code: 0,
-        message: `Status '${orderStatus || logisticsStatus}' diabaikan tanpa perubahan stok.`,
-        orderSn,
-      });
-    }
-
     // Ekstraksi items jika disertakan langsung pada payload
     let items = undefined;
     const rawItems = orderData.items || orderData.item_list;
@@ -93,21 +74,63 @@ export async function POST(req: NextRequest) {
       }));
     }
 
-    // 3. Proses pemotongan stok gudang dan sinkronisasi ke seluruh toko Shopee terhubung
-    const result = await shopeeSyncService.processShippedOrder({
-      shopId,
-      orderSn,
-      items,
-    });
+    // 2. Aturan Bisnis 1:
+    // Potong stok saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
+    const shouldDeductStock =
+      orderStatus === "READY_TO_SHIP" ||
+      orderStatus === "PROCESSED" ||
+      orderStatus === "SHIPPED" ||
+      logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
+      logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
+      logisticsStatus === "LOGISTICS_SHIPPED" ||
+      (orderStatus === "CONFIRMED" && payload.code === 3);
 
-    console.log(`[Shopee Webhook SHIPPED] Order #${orderSn}:`, result);
+    if (shouldDeductStock) {
+      const result = await shopeeSyncService.processOrderDeduction({
+        shopId,
+        orderSn,
+        items,
+      });
+
+      console.log(`[Shopee Webhook Order Deduction] Order #${orderSn}:`, result);
+
+      return NextResponse.json({
+        code: 0,
+        message: result.message,
+        orderSn,
+        deductions: result.deductions,
+        syncedStoresCount: result.syncedStoresCount,
+      });
+    }
+
+    // Aturan Bisnis 2:
+    // Kembalikan stok saat pesanan dibatalkan (CANCELLED)
+    const isCancelledOrder =
+      orderStatus === "CANCELLED" ||
+      orderStatus === "IN_CANCEL";
+
+    if (isCancelledOrder) {
+      const result = await shopeeSyncService.processCancelledOrder({
+        shopId,
+        orderSn,
+        items,
+      });
+
+      console.log(`[Shopee Webhook Order Restock] Order #${orderSn}:`, result);
+
+      return NextResponse.json({
+        code: 0,
+        message: result.message,
+        orderSn,
+        restocks: result.restocks,
+        syncedStoresCount: result.syncedStoresCount,
+      });
+    }
 
     return NextResponse.json({
       code: 0,
-      message: result.message,
+      message: `Status '${orderStatus || logisticsStatus}' diabaikan tanpa perubahan stok.`,
       orderSn,
-      deductions: result.deductions,
-      syncedStoresCount: result.syncedStoresCount,
     });
   } catch (error) {
     console.error("Error pada webhook Shopee orders:", error);

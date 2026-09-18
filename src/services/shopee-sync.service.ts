@@ -475,6 +475,312 @@ export class ShopeeSyncService {
   }) {
     return this.processShippedOrder(params);
   }
+
+  /**
+   * Memproses pesanan Shopee yang dibatalkan (CANCELLED):
+   * 1. Validasi integrasi toko Shopee penerima order dan gudang terkait.
+   * 2. Validasi idempotensi:
+   *    - Cek apakah order ini pernah dipotong stoknya (SyncJob ORDER_SHIPPED atau ORDER_DEDUCTION).
+   *      Jika TIDAK PERNAH dipotong stoknya, restock dilewati (skipped: true) untuk mencegah penggelembungan stok fiktif.
+   *    - Cek apakah order ini sudah pernah di-restock (SyncJob ORDER_CANCELLED atau ORDER_RESTOCK).
+   *      Jika SUDAH PERNAH di-restock, restock dilewati (skipped: true).
+   * 3. Mengumpulkan item pesanan (dari payload atau fetch API Shopee getOrderDetail).
+   * 4. Mengembalikan stok produk varian ke gudang terkait secara transaksional ($transaction).
+   * 5. Merekam riwayat pekerjaan di SyncJob sebagai penanda idempotensi restock (type: ORDER_CANCELLED).
+   * 6. Multi-Shop Sync: Mendorong stok terbaru yang bertambah di gudang ke SEMUA toko Shopee aktif yang terhubung.
+   */
+  async processCancelledOrder(params: {
+    shopId: string;
+    orderSn: string;
+    items?: Array<{
+      itemId?: string | number;
+      modelId?: string | number;
+      sku?: string;
+      quantity?: number;
+    }>;
+  }): Promise<{
+    success: boolean;
+    skipped?: boolean;
+    message: string;
+    restocks: string[];
+    syncedStoresCount?: number;
+  }> {
+    try {
+      const { shopId, orderSn } = params;
+      if (!shopId || !orderSn) {
+        return {
+          success: false,
+          message: "shopId dan orderSn wajib diisi",
+          restocks: [],
+        };
+      }
+
+      // 1. Cari integrasi toko Shopee penerima order
+      const integration = await this.db.integration.findFirst({
+        where: {
+          shopId: String(shopId),
+        },
+        include: {
+          warehouse: true,
+        },
+      });
+
+      if (!integration) {
+        return {
+          success: false,
+          message: `Integrasi Shopee untuk shopId ${shopId} tidak ditemukan.`,
+          restocks: [],
+        };
+      }
+
+      if (!integration.warehouseId || !integration.warehouse) {
+        return {
+          success: false,
+          message: `Toko Shopee (Shop ID: ${shopId}) belum dipetakan ke gudang.`,
+          restocks: [],
+        };
+      }
+
+      const warehouseId = integration.warehouseId;
+      const warehouseName = integration.warehouse.name;
+
+      // 2. Cek Idempotensi
+      // A. Cek apakah pesanan ini pernah dipotong stoknya sebelumnya
+      const deductionJob = await this.db.syncJob.findFirst({
+        where: {
+          integrationId: integration.id,
+          type: { in: ["ORDER_SHIPPED", "ORDER_DEDUCTION"] },
+          errorMessage: orderSn,
+          status: "COMPLETED",
+        },
+      });
+
+      if (!deductionJob) {
+        return {
+          success: true,
+          skipped: true,
+          message: `Pesanan #${orderSn} belum pernah dipotong stoknya. Restock dilewati.`,
+          restocks: [],
+        };
+      }
+
+      // B. Cek apakah pesanan ini sudah pernah di-restock
+      const alreadyRestocked = await this.db.syncJob.findFirst({
+        where: {
+          integrationId: integration.id,
+          type: { in: ["ORDER_CANCELLED", "ORDER_RESTOCK"] },
+          errorMessage: orderSn,
+          status: "COMPLETED",
+        },
+      });
+
+      if (alreadyRestocked) {
+        return {
+          success: true,
+          skipped: true,
+          message: `Pesanan #${orderSn} sudah pernah di-restock sebelumnya. Restock dilewati.`,
+          restocks: [],
+        };
+      }
+
+      // 3. Kumpulkan rincian item pesanan
+      let itemsToRestock = params.items || [];
+
+      // Jika webhook payload tidak menyertakan daftar item, fetch melalui Open API Shopee
+      if (itemsToRestock.length === 0) {
+        try {
+          const shopeeClient = await getShopeeClientForIntegration(integration.id);
+          const detailRes = await shopeeClient.order.getOrderDetail({
+            order_sn_list: [orderSn],
+            response_optional_fields: "item_list",
+          });
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const detailData = (detailRes as any)?.response || detailRes;
+          const orderDetail = detailData?.order_list?.[0];
+          const itemList = orderDetail?.item_list || [];
+
+          itemsToRestock = itemList.map(
+            (it: {
+              item_id?: number;
+              model_id?: number;
+              model_sku?: string;
+              item_sku?: string;
+              model_quantity_purchased?: number;
+            }) => ({
+              itemId: it.item_id,
+              modelId: it.model_id,
+              sku: (it.model_sku || it.item_sku || "").trim(),
+              quantity: it.model_quantity_purchased || 1,
+            })
+          );
+        } catch (err) {
+          console.warn(`Gagal fetch order detail untuk #${orderSn}:`, err);
+        }
+      }
+
+      if (itemsToRestock.length === 0) {
+        return {
+          success: false,
+          message: `Tidak ditemukan rincian item untuk pesanan #${orderSn}`,
+          restocks: [],
+        };
+      }
+
+      // 4. Tambah kembali stok produk di gudang secara transaksional ($transaction)
+      const restockLogs: string[] = [];
+      const restockedVariants: Array<{ variantId: string; sku?: string }> = [];
+
+      const executeInTx = async (
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        fn: (tx: any) => Promise<void>
+      ) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (typeof (this.db as any).$transaction === "function") {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          return (this.db as any).$transaction(fn);
+        }
+        return fn(this.db);
+      };
+
+      await executeInTx(async (tx) => {
+        for (const item of itemsToRestock) {
+          let variant = null;
+
+          // Cari berdasarkan SKU lokal (case-insensitive & trimmed)
+          if (item.sku && item.sku.trim()) {
+            variant = await tx.productVariant.findFirst({
+              where: {
+                sku: {
+                  equals: item.sku.trim(),
+                  mode: "insensitive",
+                },
+              },
+              include: { product: true },
+            });
+          }
+
+          // Fallback: cari lewat mapping ProductIntegration jika SKU Shopee kosong atau berbeda
+          if (!variant && item.itemId) {
+            const pi = await tx.productIntegration.findFirst({
+              where: {
+                integrationId: integration.id,
+                externalId: String(item.itemId),
+                ...(item.modelId ? { externalModelId: String(item.modelId) } : {}),
+                variantId: { not: null },
+              },
+              include: {
+                variant: {
+                  include: { product: true },
+                },
+              },
+            });
+            if (pi?.variant) {
+              variant = pi.variant;
+            }
+          }
+
+          if (!variant) {
+            restockLogs.push(
+              `SKU "${item.sku || `ItemID ${item.itemId}`}" tidak ditemukan pada database produk lokal`
+            );
+            continue;
+          }
+
+          const orderQty = Math.max(1, Number(item.quantity) || 1);
+
+          // Ambil stok saat ini di gudang terkait
+          const currentStockRecord = await tx.productVariantStock.findUnique({
+            where: {
+              variantId_warehouseId: {
+                variantId: variant.id,
+                warehouseId,
+              },
+            },
+          });
+
+          const currentQty = currentStockRecord ? currentStockRecord.stock : 0;
+          const newStock = currentQty + orderQty;
+
+          // Update/upsert stok di gudang
+          const updatedStock = await tx.productVariantStock.upsert({
+            where: {
+              variantId_warehouseId: {
+                variantId: variant.id,
+                warehouseId,
+              },
+            },
+            update: {
+              stock: newStock,
+            },
+            create: {
+              variantId: variant.id,
+              warehouseId,
+              stock: newStock,
+            },
+          });
+
+          restockedVariants.push({ variantId: variant.id, sku: variant.sku });
+          restockLogs.push(
+            `Stok SKU "${variant.sku}" (${variant.product?.name || "Produk"}) di gudang "${warehouseName}" bertambah ${orderQty} (${currentQty} -> ${updatedStock.stock}) karena pembatalan pesanan #${orderSn}`
+          );
+        }
+
+        // Catat log restock pesanan untuk idempotency dalam transaksi yang sama
+        await tx.syncJob.create({
+          data: {
+            integrationId: integration.id,
+            type: "ORDER_CANCELLED",
+            status: "COMPLETED",
+            totalItems: itemsToRestock.length,
+            processedItems: restockedVariants.length,
+            errorMessage: orderSn,
+          },
+        });
+      });
+
+      // 5. Multi-Shop Sync: Sinkronkan sisa stok yang bertambah ke SEMUA toko Shopee aktif yang terhubung dengan gudang ini
+      let syncedStoresCount = 0;
+      if (restockedVariants.length > 0) {
+        const syncResult = await this.pushStockUpdateToShopee(
+          warehouseId,
+          restockedVariants,
+          { allowInactive: false }
+        );
+        syncedStoresCount = syncResult.pushedCount;
+      }
+
+      return {
+        success: true,
+        message: `Berhasil merestock pesanan #${orderSn}. ${restockedVariants.length} varian dikembalikan ke gudang "${warehouseName}" dan stok telah disinkronkan ke toko Shopee.`,
+        restocks: restockLogs,
+        syncedStoresCount,
+      };
+    } catch (err) {
+      console.error("Error pada processCancelledOrder:", err);
+      return {
+        success: false,
+        message: err instanceof Error ? err.message : "Internal error",
+        restocks: [],
+      };
+    }
+  }
+
+  /**
+   * Alias untuk processCancelledOrder
+   */
+  async processOrderRestock(params: {
+    shopId: string;
+    orderSn: string;
+    items?: Array<{
+      itemId?: string | number;
+      modelId?: string | number;
+      sku?: string;
+      quantity?: number;
+    }>;
+  }) {
+    return this.processCancelledOrder(params);
+  }
 }
 
 export const shopeeSyncService = new ShopeeSyncService();

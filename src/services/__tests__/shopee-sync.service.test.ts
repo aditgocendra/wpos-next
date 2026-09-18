@@ -411,4 +411,224 @@ describe("ShopeeSyncService Unit Tests", () => {
       expect(res.deductions[0]).toContain("tidak ditemukan pada database produk lokal");
     });
   });
+
+  describe("processCancelledOrder", () => {
+    it("should skip restock if order was never deducted", async () => {
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-1",
+        shopId: "shop-123",
+        warehouseId: "wh-1",
+        warehouse: { name: "Gudang Utama" },
+      });
+
+      // Belum pernah ada catatan pemotongan stok
+      mockPrisma.syncJob.findFirst.mockResolvedValue(null);
+
+      const res = await shopeeSyncService.processCancelledOrder({
+        shopId: "shop-123",
+        orderSn: "CANCEL-ORDER-NOT-DEDUCTED",
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.skipped).toBe(true);
+      expect(res.message).toContain("belum pernah dipotong");
+      expect(mockPrisma.productVariantStock.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should skip restock if order was already restocked (idempotent)", async () => {
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-1",
+        shopId: "shop-123",
+        warehouseId: "wh-1",
+        warehouse: { name: "Gudang Utama" },
+      });
+
+      // 1. Cek potongan: pernah dipotong
+      // 2. Cek restock: sudah pernah di-restock
+      mockPrisma.syncJob.findFirst
+        .mockResolvedValueOnce({
+          id: "job-deduct-1",
+          type: "ORDER_SHIPPED",
+          errorMessage: "ORDER-ALREADY-RESTOCKED",
+          status: "COMPLETED",
+        })
+        .mockResolvedValueOnce({
+          id: "job-restock-1",
+          type: "ORDER_CANCELLED",
+          errorMessage: "ORDER-ALREADY-RESTOCKED",
+          status: "COMPLETED",
+        });
+
+      const res = await shopeeSyncService.processCancelledOrder({
+        shopId: "shop-123",
+        orderSn: "ORDER-ALREADY-RESTOCKED",
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.skipped).toBe(true);
+      expect(res.message).toContain("sudah pernah di-restock");
+      expect(mockPrisma.productVariantStock.upsert).not.toHaveBeenCalled();
+    });
+
+    it("should restock warehouse stock and sync updated stock to multiple stores (Toko A & Toko B)", async () => {
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-shop-a",
+        shopId: "shop-A",
+        warehouseId: "wh-gudang-a",
+        warehouse: { name: "Gudang A" },
+      });
+
+      // Pernah dipotong, belum pernah di-restock
+      mockPrisma.syncJob.findFirst
+        .mockResolvedValueOnce({
+          id: "job-deduct-1",
+          type: "ORDER_SHIPPED",
+          errorMessage: "ORDER-CANCELLED-001",
+          status: "COMPLETED",
+        })
+        .mockResolvedValueOnce(null);
+
+      mockPrisma.syncJob.create.mockResolvedValue({ id: "job-restock-new" });
+
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: "var-1",
+        sku: "PROD-SKU-01",
+        product: { name: "Kemeja Flanel" },
+      });
+
+      // Stock awal sebelum pembatalan adalah 45
+      mockPrisma.productVariantStock.findUnique.mockResolvedValue({
+        stock: 45,
+      });
+
+      // Stock baru di Gudang A setelah dibatalkan bertambah 5 menjadi 50
+      mockPrisma.productVariantStock.upsert.mockResolvedValue({
+        stock: 50,
+      });
+
+      // Gudang A terhubung dengan Toko A dan Toko B
+      mockPrisma.integration.findMany.mockResolvedValue([
+        {
+          id: "int-shop-a",
+          shopId: "shop-A",
+          warehouseId: "wh-gudang-a",
+          status: "ACTIVE",
+        },
+        {
+          id: "int-shop-b",
+          shopId: "shop-B",
+          warehouseId: "wh-gudang-a",
+          status: "ACTIVE",
+        },
+      ]);
+
+      mockPrisma.productIntegration.findMany
+        .mockResolvedValueOnce([
+          {
+            id: "pi-a",
+            integrationId: "int-shop-a",
+            externalId: "11111",
+            externalModelId: "0",
+            sku: "PROD-SKU-01",
+            variant: { warehouseStocks: [{ stock: 50 }] },
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: "pi-b",
+            integrationId: "int-shop-b",
+            externalId: "22222",
+            externalModelId: "0",
+            sku: "PROD-SKU-01",
+            variant: { warehouseStocks: [{ stock: 50 }] },
+          },
+        ]);
+
+      mockPrisma.productIntegration.update.mockResolvedValue({});
+
+      const res = await shopeeSyncService.processCancelledOrder({
+        shopId: "shop-A",
+        orderSn: "ORDER-CANCELLED-001",
+        items: [
+          {
+            sku: "PROD-SKU-01",
+            quantity: 5,
+          },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+
+      // Verifikasi stok ditambahkan di database (45 + 5 = 50)
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            variantId_warehouseId: {
+              variantId: "var-1",
+              warehouseId: "wh-gudang-a",
+            },
+          },
+          update: { stock: 50 },
+        })
+      );
+
+      // Verifikasi dicatat ke syncJob dengan type ORDER_CANCELLED
+      expect(mockPrisma.syncJob.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            integrationId: "int-shop-a",
+            type: "ORDER_CANCELLED",
+            errorMessage: "ORDER-CANCELLED-001",
+          }),
+        })
+      );
+
+      // Verifikasi sisa stok terdorong ke Toko A dan Toko B
+      expect(res.syncedStoresCount).toBe(2);
+    });
+
+    it("should fetch item details using Shopee API if items array is omitted on cancel", async () => {
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-shop-a",
+        shopId: "shop-A",
+        warehouseId: "wh-gudang-a",
+        warehouse: { name: "Gudang A" },
+      });
+
+      mockPrisma.syncJob.findFirst
+        .mockResolvedValueOnce({
+          id: "job-deduct-1",
+          type: "ORDER_SHIPPED",
+          errorMessage: "ORDER-CANCEL-FETCH",
+          status: "COMPLETED",
+        })
+        .mockResolvedValueOnce(null);
+
+      mockPrisma.syncJob.create.mockResolvedValue({ id: "job-new" });
+
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: "var-fetched",
+        sku: "FETCHED-SKU",
+        product: { name: "Fetched Product" },
+      });
+
+      mockPrisma.productVariantStock.findUnique.mockResolvedValue({ stock: 10 });
+      // 10 + 3 (dari mock getOrderDetail item_list quantity 3) = 13
+      mockPrisma.productVariantStock.upsert.mockResolvedValue({ stock: 13 });
+      mockPrisma.integration.findMany.mockResolvedValue([]);
+
+      const res = await shopeeSyncService.processCancelledOrder({
+        shopId: "shop-A",
+        orderSn: "ORDER-CANCEL-FETCH",
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: { stock: 13 },
+        })
+      );
+    });
+  });
 });

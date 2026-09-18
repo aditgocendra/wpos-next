@@ -150,7 +150,20 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Aturan Bisnis: Pemotongan stok otomatis saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
+      // Ekstraksi items jika disertakan langsung pada payload
+      let items = undefined;
+      const rawItems = orderData.items || orderData.item_list;
+      if (Array.isArray(rawItems) && rawItems.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        items = rawItems.map((it: any) => ({
+          itemId: it.item_id,
+          modelId: it.model_id,
+          sku: (it.model_sku || it.item_sku || "").trim(),
+          quantity: it.model_quantity_purchased || it.model_quantity || it.quantity || 1,
+        }));
+      }
+
+      // Aturan Bisnis 1: Pemotongan stok otomatis saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
       const shouldDeductStock =
         orderStatus === "READY_TO_SHIP" ||
         orderStatus === "PROCESSED" ||
@@ -161,19 +174,7 @@ export async function POST(req: NextRequest) {
         (orderStatus === "CONFIRMED" && eventCode === 3);
 
       if (shouldDeductStock) {
-        let items = undefined;
-        const rawItems = orderData.items || orderData.item_list;
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          items = rawItems.map((it: any) => ({
-            itemId: it.item_id,
-            modelId: it.model_id,
-            sku: (it.model_sku || it.item_sku || "").trim(),
-            quantity: it.model_quantity_purchased || it.model_quantity || it.quantity || 1,
-          }));
-        }
-
-        const result = await shopeeSyncService.processShippedOrder({
+        const result = await shopeeSyncService.processOrderDeduction({
           shopId,
           orderSn,
           items,
@@ -185,6 +186,28 @@ export async function POST(req: NextRequest) {
           message: result.message,
           orderSn,
           deductions: result.deductions,
+          syncedStoresCount: result.syncedStoresCount,
+        });
+      }
+
+      // Aturan Bisnis 2: Pengembalian stok otomatis saat pesanan dibatalkan (CANCELLED)
+      const isCancelledOrder =
+        orderStatus === "CANCELLED" ||
+        orderStatus === "IN_CANCEL";
+
+      if (isCancelledOrder) {
+        const result = await shopeeSyncService.processCancelledOrder({
+          shopId,
+          orderSn,
+          items,
+        });
+
+        console.log(`[Shopee Webhook Order Restock] Order #${orderSn} (${orderStatus}):`, result);
+        return NextResponse.json({
+          code: 0,
+          message: result.message,
+          orderSn,
+          restocks: result.restocks,
           syncedStoresCount: result.syncedStoresCount,
         });
       }
