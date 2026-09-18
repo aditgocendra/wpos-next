@@ -12,18 +12,20 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { productId, variantId, warehouseId } = body;
+    const { productId, variantId, variantIds, warehouseId } = body;
 
-    if (!productId && !variantId) {
+    if (!productId && !variantId && (!Array.isArray(variantIds) || variantIds.length === 0)) {
       return NextResponse.json(
-        { error: "productId atau variantId wajib disertakan" },
+        { error: "productId, variantId, atau variantIds wajib disertakan" },
         { status: 400 }
       );
     }
 
     // Ambil variant IDs yang ingin disinkronkan
     let targetVariantIds: string[] = [];
-    if (variantId) {
+    if (Array.isArray(variantIds) && variantIds.length > 0) {
+      targetVariantIds = variantIds.filter((id): id is string => typeof id === "string" && Boolean(id));
+    } else if (variantId) {
       targetVariantIds = [variantId];
     } else if (productId) {
       const variants = await prisma.productVariant.findMany({

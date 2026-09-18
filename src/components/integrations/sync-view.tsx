@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   ArrowLeftIcon,
   PlayIcon,
@@ -17,15 +19,22 @@ import {
   ShoppingBagIcon,
   CheckIcon,
   WarehouseIcon,
+  SearchIcon,
+  CheckSquareIcon,
+  BoxesIcon,
 } from "lucide-react";
 
 interface SyncResultItem {
+  itemId?: string;
+  modelId?: string;
   sku: string;
   name: string;
   isLinked: boolean;
+  variantId?: string | null;
   localProductName: string | null;
   syncStatus: string;
   stockAdjusted?: boolean;
+  shopeeStock?: number;
   warehouseStock?: number | null;
 }
 
@@ -51,6 +60,13 @@ export function SyncView({ integrationId }: SyncViewProps) {
   const [linkedCount, setLinkedCount] = useState(0);
   const [unlinkedCount, setUnlinkedCount] = useState(0);
   const [syncLogs, setSyncLogs] = useState<SyncResultItem[]>([]);
+
+  // Refactor: Penampung produk dengan SKU cocok & pemilihan checkbox manual
+  const [matchedProducts, setMatchedProducts] = useState<SyncResultItem[]>([]);
+  const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([]);
+  const [isSyncingStock, setIsSyncingStock] = useState(false);
+  const [syncedVariantIds, setSyncedVariantIds] = useState<Set<string>>(new Set());
+  const [searchFilter, setSearchFilter] = useState("");
 
   const cancelRef = useRef(false);
 
@@ -99,6 +115,9 @@ export function SyncView({ integrationId }: SyncViewProps) {
     setLinkedCount(0);
     setUnlinkedCount(0);
     setSyncLogs([]);
+    setMatchedProducts([]);
+    setSelectedVariantIds([]);
+    setSyncedVariantIds(new Set());
     cancelRef.current = false;
 
     let currentOffset = 0;
@@ -107,7 +126,6 @@ export function SyncView({ integrationId }: SyncViewProps) {
     let localProcessed = 0;
     let localLinked = 0;
     let localUnlinked = 0;
-    let localStockAdjusted = 0;
 
     try {
       while (hasMore && !cancelRef.current) {
@@ -154,10 +172,30 @@ export function SyncView({ integrationId }: SyncViewProps) {
         );
         setProgressPercent(percent);
 
+        // Kumpulkan produk yang SKU-nya cocok secara lokal
+        const matchedInBatch = batchResults.filter((it) => it.isLinked && it.variantId);
+        if (matchedInBatch.length > 0) {
+          setMatchedProducts((prev) => {
+            const existingVariantIds = new Set(prev.map((p) => p.variantId));
+            const newMatched = matchedInBatch.filter(
+              (p) => p.variantId && !existingVariantIds.has(p.variantId)
+            );
+            return [...prev, ...newMatched];
+          });
+
+          // Otomatis pilih item baru agar siap disinkronkan saat user ingin "Pilih Semua"
+          setSelectedVariantIds((prev) => {
+            const existingSet = new Set(prev);
+            matchedInBatch.forEach((p) => {
+              if (p.variantId) existingSet.add(p.variantId);
+            });
+            return Array.from(existingSet);
+          });
+        }
+
         batchResults.forEach((it) => {
           if (it.isLinked) localLinked++;
           else localUnlinked++;
-          if (it.stockAdjusted) localStockAdjusted++;
         });
 
         setLinkedCount(localLinked);
@@ -171,13 +209,9 @@ export function SyncView({ integrationId }: SyncViewProps) {
       if (!cancelRef.current) {
         setIsFinished(true);
         setProgressPercent(100);
-        const stockInfo =
-          localStockAdjusted > 0
-            ? ` dan ${localStockAdjusted} stok varian berhasil disesuaikan ke Shopee`
-            : "";
         toast.success(
-          `Sinkronisasi Selesai! ${localProcessed} produk diproses (${localLinked} terhubung${stockInfo}).`,
-          { duration: 5000 }
+          `Sinkronisasi Selesai! ${localProcessed} produk diproses (${localLinked} varian terhubung). Silakan pilih produk di bawah untuk sinkronisasi stok ke Shopee.`,
+          { duration: 6000 }
         );
       }
     } catch (err) {
@@ -194,6 +228,87 @@ export function SyncView({ integrationId }: SyncViewProps) {
     cancelRef.current = true;
     setIsRunning(false);
     toast.info("Sinkronisasi dihentikan oleh pengguna");
+  };
+
+  // Filter list produk yang cocok berdasarkan search term
+  const filteredMatchedProducts = useMemo(() => {
+    if (!searchFilter.trim()) return matchedProducts;
+    const q = searchFilter.toLowerCase();
+    return matchedProducts.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        (p.localProductName && p.localProductName.toLowerCase().includes(q))
+    );
+  }, [matchedProducts, searchFilter]);
+
+  const allFilteredSelected = useMemo(() => {
+    if (filteredMatchedProducts.length === 0) return false;
+    return filteredMatchedProducts.every(
+      (p) => p.variantId && selectedVariantIds.includes(p.variantId)
+    );
+  }, [filteredMatchedProducts, selectedVariantIds]);
+
+  const handleToggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const idsToAdd = filteredMatchedProducts
+        .map((p) => p.variantId)
+        .filter((id): id is string => Boolean(id));
+      setSelectedVariantIds((prev) => Array.from(new Set([...prev, ...idsToAdd])));
+    } else {
+      const idsToRemove = new Set(
+        filteredMatchedProducts.map((p) => p.variantId).filter(Boolean)
+      );
+      setSelectedVariantIds((prev) => prev.filter((id) => !idsToRemove.has(id)));
+    }
+  };
+
+  const handleToggleItem = (variantId: string) => {
+    setSelectedVariantIds((prev) =>
+      prev.includes(variantId) ? prev.filter((id) => id !== variantId) : [...prev, variantId]
+    );
+  };
+
+  const handleSyncSelectedStock = async () => {
+    if (selectedVariantIds.length === 0) {
+      toast.warning("Silakan centang minimal satu produk yang ingin disinkronkan stoknya.");
+      return;
+    }
+
+    try {
+      setIsSyncingStock(true);
+      const res = await fetch("/api/shopee/sync/stock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          variantIds: selectedVariantIds,
+          warehouseId: integration.warehouse?.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal menyinkronkan stok ke Shopee");
+      }
+
+      toast.success(
+        `Sukses! Stok untuk ${data.pushedCount ?? selectedVariantIds.length} varian berhasil diperbarui di Shopee.`,
+        { duration: 5000 }
+      );
+
+      // Tandai item yang sudah disinkronkan
+      setSyncedVariantIds((prev) => {
+        const nextSet = new Set(prev);
+        selectedVariantIds.forEach((id) => nextSet.add(id));
+        return nextSet;
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Terjadi kesalahan saat sinkronisasi stok"
+      );
+    } finally {
+      setIsSyncingStock(false);
+    }
   };
 
   if (loadingInfo) {
@@ -332,15 +447,15 @@ export function SyncView({ integrationId }: SyncViewProps) {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Progres Sinkronisasi (Client-Driven Chunking)</CardTitle>
+            <CardTitle className="text-sm">Progres Sinkronisasi Produk</CardTitle>
             <span className="text-xs font-mono font-semibold">{progressPercent}%</span>
           </div>
           <CardDescription className="text-xs">
             {isRunning
-              ? "Sedang memproses batch produk dari Shopee ke database lokal..."
+              ? "Sedang memproses batch produk dari Shopee dan memetakan SKU ke database lokal..."
               : isFinished
               ? "Semua data produk telah selesai disinkronisasi."
-              : "Klik 'Mulai Sinkronisasi' untuk memulai tarikan produk."}
+              : "Klik 'Mulai Sinkronisasi' untuk memulai tarikan produk tanpa mengubah stok secara otomatis."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -350,54 +465,208 @@ export function SyncView({ integrationId }: SyncViewProps) {
               style={{ width: `${progressPercent}%` }}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Real-time Activity Feed */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Aktivitas Terakhir ({syncLogs.length} item)
-            </p>
-            <div className="max-h-72 overflow-y-auto border rounded-md divide-y text-xs">
-              {syncLogs.length === 0 ? (
-                <div className="p-6 text-center text-muted-foreground">
-                  Belum ada log aktivitas sinkronisasi.
-                </div>
-              ) : (
-                syncLogs.slice(0, 50).map((log, idx) => (
-                  <div key={idx} className="p-2.5 flex items-center justify-between gap-2">
-                    <div className="space-y-0.5 min-w-0">
-                      <p className="font-medium truncate">{log.name}</p>
-                      <p className="font-mono text-[11px] text-muted-foreground">
-                        SKU: {log.sku}{" "}
-                        {log.localProductName && `• Lokal: ${log.localProductName}`}
-                        {log.stockAdjusted && log.warehouseStock !== null && (
-                          <span className="text-emerald-600 font-semibold ml-1">
-                            • Stok Disinkron: {log.warehouseStock}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {log.isLinked ? (
-                        <>
-                          <Badge variant="outline" className="text-emerald-600 border-emerald-300">
-                            <CheckIcon className="h-3 w-3 mr-1" /> Terhubung
-                          </Badge>
-                          {log.stockAdjusted && (
-                            <Badge className="bg-[#EE4D2D] hover:bg-[#d73211] text-white text-[10px] px-1.5 py-0">
-                              Stok Disinkron
-                            </Badge>
-                          )}
-                        </>
-                      ) : (
-                        <Badge variant="secondary" className="text-amber-700 bg-amber-50">
-                          SKU Baru
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+      {/* REFACTOR: Tabel Seleksi Manual Produk dengan Checkbox */}
+      {matchedProducts.length > 0 && (
+        <Card className="border-border shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BoxesIcon className="h-5 w-5 text-[#EE4D2D]" />
+                  <span>Pilih Produk untuk Sinkronisasi Stok</span>
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {matchedProducts.length} SKU Cocok
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs mt-1">
+                  Produk berikut memiliki SKU yang persis sama. Stok <strong>tidak</strong> langsung disinkronkan secara otomatis. Centang produk yang ingin Anda perbarui stoknya di Shopee sesuai stok gudang.
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  onClick={handleSyncSelectedStock}
+                  disabled={selectedVariantIds.length === 0 || isSyncingStock}
+                  className="bg-[#EE4D2D] hover:bg-[#d73211] text-white shadow-sm"
+                >
+                  <RefreshCwIcon className={`mr-1.5 h-3.5 w-3.5 ${isSyncingStock ? "animate-spin" : ""}`} />
+                  {isSyncingStock
+                    ? "Menyinkronkan Stok..."
+                    : `Sinkronkan Stok Terpilih (${selectedVariantIds.length})`}
+                </Button>
+              </div>
             </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Filter & Select Action Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+              <div className="relative flex-1 max-w-sm">
+                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Cari berdasarkan SKU atau nama produk..."
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleToggleSelectAll(!allFilteredSelected)}
+                  className="h-7 text-xs px-2"
+                >
+                  <CheckSquareIcon className="h-3.5 w-3.5 mr-1 text-[#EE4D2D]" />
+                  {allFilteredSelected ? "Batal Pilih Semua" : "Pilih Semua"}
+                </Button>
+                <span>•</span>
+                <span>
+                  <strong className="text-foreground">{selectedVariantIds.length}</strong> dari {matchedProducts.length} dipilih
+                </span>
+              </div>
+            </div>
+
+            {/* Matched Products Table */}
+            <div className="border rounded-md overflow-hidden">
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-muted/50 sticky top-0 border-b z-10">
+                    <tr>
+                      <th className="p-2.5 w-10 text-center">
+                        <Checkbox
+                          checked={allFilteredSelected}
+                          onCheckedChange={(checked) => handleToggleSelectAll(Boolean(checked))}
+                          aria-label="Pilih semua produk"
+                        />
+                      </th>
+                      <th className="p-2.5 font-semibold">Produk Shopee</th>
+                      <th className="p-2.5 font-semibold">SKU</th>
+                      <th className="p-2.5 font-semibold">Produk Lokal</th>
+                      <th className="p-2.5 font-semibold text-center">Stok Shopee</th>
+                      <th className="p-2.5 font-semibold text-center">Stok Gudang</th>
+                      <th className="p-2.5 font-semibold text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredMatchedProducts.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                          {searchFilter ? "Tidak ada produk yang cocok dengan pencarian." : "Belum ada produk dengan SKU cocok."}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMatchedProducts.map((item) => {
+                        const variantId = item.variantId || "";
+                        const isChecked = selectedVariantIds.includes(variantId);
+                        const isSynced = syncedVariantIds.has(variantId);
+                        const shopeeStock = item.shopeeStock ?? 0;
+                        const whStock = item.warehouseStock ?? 0;
+                        const diff = whStock - shopeeStock;
+
+                        return (
+                          <tr
+                            key={variantId || item.sku}
+                            className={`hover:bg-accent/40 transition-colors ${
+                              isChecked ? "bg-orange-50/30 dark:bg-orange-950/10" : ""
+                            }`}
+                          >
+                            <td className="p-2.5 text-center">
+                              <Checkbox
+                                checked={isChecked}
+                                onCheckedChange={() => variantId && handleToggleItem(variantId)}
+                                aria-label={`Pilih ${item.name}`}
+                              />
+                            </td>
+                            <td className="p-2.5 font-medium max-w-[220px] truncate" title={item.name}>
+                              {item.name}
+                            </td>
+                            <td className="p-2.5 font-mono text-[11px] text-muted-foreground">
+                              {item.sku}
+                            </td>
+                            <td className="p-2.5 text-muted-foreground max-w-[180px] truncate" title={item.localProductName || "-"}>
+                              {item.localProductName || "-"}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-medium">
+                              {shopeeStock}
+                            </td>
+                            <td className="p-2.5 text-center font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                              {whStock}
+                            </td>
+                            <td className="p-2.5 text-center">
+                              {isSynced ? (
+                                <Badge className="bg-emerald-600 text-white text-[10px] px-1.5 py-0">
+                                  ✓ Stok Disinkron
+                                </Badge>
+                              ) : diff !== 0 ? (
+                                <Badge variant="outline" className="text-amber-600 border-amber-300 text-[10px] px-1.5 py-0">
+                                  Beda ({diff > 0 ? `+${diff}` : diff})
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  Stok Sama
+                                </Badge>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Real-time Activity Feed */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Riwayat Aktivitas Pemindaian ({syncLogs.length} item)</CardTitle>
+          <CardDescription className="text-xs">
+            Log item yang ditarik dari Shopee dan status pemetaannya terhadap database lokal.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="max-h-72 overflow-y-auto border rounded-md divide-y text-xs">
+            {syncLogs.length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">
+                Belum ada log aktivitas sinkronisasi.
+              </div>
+            ) : (
+              syncLogs.slice(0, 50).map((log, idx) => (
+                <div key={idx} className="p-2.5 flex items-center justify-between gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="font-medium truncate">{log.name}</p>
+                    <p className="font-mono text-[11px] text-muted-foreground">
+                      SKU: {log.sku}{" "}
+                      {log.localProductName && `• Lokal: ${log.localProductName}`}
+                      {log.warehouseStock !== undefined && log.warehouseStock !== null && (
+                        <span className="text-muted-foreground ml-1">
+                          • Stok Gudang: {log.warehouseStock} | Shopee: {log.shopeeStock ?? 0}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {log.isLinked ? (
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-300">
+                        <CheckIcon className="h-3 w-3 mr-1" /> Terhubung
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-amber-700 bg-amber-50">
+                        SKU Baru
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

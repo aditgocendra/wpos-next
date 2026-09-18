@@ -262,7 +262,7 @@ export class ShopeeSyncService {
       const alreadyProcessed = await this.db.syncJob.findFirst({
         where: {
           integrationId: integration.id,
-          type: "ORDER_SHIPPED",
+          type: { in: ["ORDER_SHIPPED", "ORDER_DEDUCTION"] },
           errorMessage: orderSn,
           status: "COMPLETED",
         },
@@ -458,6 +458,22 @@ export class ShopeeSyncService {
         deductions: [],
       };
     }
+  }
+
+  /**
+   * Alias untuk processShippedOrder agar mencakup pesanan dari status READY_TO_SHIP maupun PROCESSED
+   */
+  async processOrderDeduction(params: {
+    shopId: string;
+    orderSn: string;
+    items?: Array<{
+      itemId?: string | number;
+      modelId?: string | number;
+      sku?: string;
+      quantity?: number;
+    }>;
+  }) {
+    return this.processShippedOrder(params);
   }
 }
 

@@ -151,13 +151,13 @@ describe("Shopee Webhook Route Tests", () => {
     );
   });
 
-  it("should acknowledge without stock change if order is not shipped", async () => {
+  it("should acknowledge without stock change if order is UNPAID", async () => {
     const payload = {
       code: 3,
       shop_id: "shop-123",
       data: {
-        ordersn: "NOT-SHIPPED-YET",
-        status: "READY_TO_SHIP",
+        ordersn: "UNPAID-ORDER-123",
+        status: "UNPAID",
         logistics_status: "LOGISTICS_NOT_START",
       },
     };
@@ -173,6 +173,42 @@ describe("Shopee Webhook Route Tests", () => {
     expect(res.status).toBe(200);
     expect(data.message).toContain("without stock change");
     expect(shopeeSyncService.processShippedOrder).not.toHaveBeenCalled();
+  });
+
+  it("should deduct stock automatically when order status is READY_TO_SHIP", async () => {
+    vi.mocked(shopeeSyncService.processShippedOrder).mockResolvedValue({
+      success: true,
+      message: "Stok berhasil dipotong untuk status READY_TO_SHIP",
+      deductions: ["SKU-001 berkurang 1"],
+      syncedStoresCount: 1,
+    });
+
+    const payload = {
+      code: 3,
+      shop_id: "shop-123",
+      data: {
+        ordersn: "RTS-ORDER-999",
+        status: "READY_TO_SHIP",
+        logistics_status: "LOGISTICS_NOT_START",
+      },
+    };
+
+    const req = new NextRequest("http://localhost:3000/api/shopee/webhook", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.code).toBe(0);
+    expect(shopeeSyncService.processShippedOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shopId: "shop-123",
+        orderSn: "RTS-ORDER-999",
+      })
+    );
   });
 
   it("should update integration status on authorization event (code 1)", async () => {

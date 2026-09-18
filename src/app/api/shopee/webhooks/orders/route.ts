@@ -62,17 +62,20 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Aturan Bisnis:
-    // Potong stok saat pesanan sudah dipickup / diserahkan ke jasa pengiriman (status 'SHIPPED')
-    const isHandedOver =
+    // Potong stok saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
+    const shouldDeductStock =
+      orderStatus === "READY_TO_SHIP" ||
+      orderStatus === "PROCESSED" ||
       orderStatus === "SHIPPED" ||
       logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
+      logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
       logisticsStatus === "LOGISTICS_SHIPPED" ||
-      (orderStatus === "PROCESSED" && payload.code === 3);
+      (orderStatus === "CONFIRMED" && payload.code === 3);
 
-    if (!isHandedOver) {
+    if (!shouldDeductStock) {
       return NextResponse.json({
         code: 0,
-        message: `Status '${orderStatus || logisticsStatus}' diabaikan. Pemotongan stok hanya dilakukan saat pesanan diserahkan ke jasa pengiriman (SHIPPED).`,
+        message: `Status '${orderStatus || logisticsStatus}' diabaikan tanpa perubahan stok.`,
         orderSn,
       });
     }
