@@ -316,11 +316,12 @@ export class ShopeeOrderService {
       const now = new Date();
       const actualEnd = endOfMonth > now ? now : endOfMonth;
 
-      let timeFrom = Math.floor(startOfMonth.getTime() / 1000);
+      const startSec = Math.floor(startOfMonth.getTime() / 1000);
       const finalTimeTo = Math.floor(actualEnd.getTime() / 1000);
+      const endOfMonthSec = Math.floor(endOfMonth.getTime() / 1000);
 
-      // If timeFrom is in the future
-      if (timeFrom > finalTimeTo) {
+      // If startSec is in the future
+      if (startSec > finalTimeTo) {
         return [];
       }
 
@@ -328,10 +329,11 @@ export class ShopeeOrderService {
       const MAX_CHUNK_SECONDS = 14 * 86400 + 86399; // 14.99 days
       const chunks: { from: number; to: number }[] = [];
 
-      while (timeFrom <= finalTimeTo) {
-        const chunkTo = Math.min(timeFrom + MAX_CHUNK_SECONDS, finalTimeTo);
-        chunks.push({ from: timeFrom, to: chunkTo });
-        timeFrom = chunkTo + 1;
+      let chunkStart = startSec;
+      while (chunkStart <= finalTimeTo) {
+        const chunkTo = Math.min(chunkStart + MAX_CHUNK_SECONDS, finalTimeTo);
+        chunks.push({ from: chunkStart, to: chunkTo });
+        chunkStart = chunkTo + 1;
       }
 
       // 1. Fetch order lists for each chunk
@@ -388,7 +390,7 @@ export class ShopeeOrderService {
         const batch = allOrderSns.slice(i, i + BATCH_SIZE);
         try {
           const detailRes = await shopeeClient.order.getOrderDetail({
-            order_sn_list: batch,
+            order_sn_list: [batch.join(",")],
             response_optional_fields: "item_list,buyer_cancel_reason,cancel_reason,total_amount",
           });
 
@@ -399,7 +401,14 @@ export class ShopeeOrderService {
           for (const ord of orderList) {
             const orderSn = ord.order_sn;
             const orderStatus = ord.order_status || orderStatusMap.get(orderSn) || "PROCESSED";
-            const createTime = Number(ord.create_time) || Math.floor(startOfMonth.getTime() / 1000);
+            const rawCreateTime = ord.create_time;
+            const createTime =
+              typeof rawCreateTime === "number"
+                ? rawCreateTime
+                : !isNaN(new Date(rawCreateTime).getTime())
+                ? Math.floor(new Date(rawCreateTime).getTime() / 1000)
+                : startSec;
+
             const cancelReason = ord.cancel_reason || ord.buyer_cancel_reason || "";
             const totalAmount = Number(ord.total_amount) || 0;
 
@@ -457,7 +466,7 @@ export class ShopeeOrderService {
 
       // Strictly filter orders to ensure they fall within the exact month range
       return detailedOrders.filter(
-        (ord) => ord.createTime >= timeFrom && ord.createTime <= finalTimeTo
+        (ord) => ord.createTime >= startSec && ord.createTime <= endOfMonthSec
       );
     } catch (err) {
       console.warn("[ShopeeOrderService] pullOrdersFromShopee error:", err);

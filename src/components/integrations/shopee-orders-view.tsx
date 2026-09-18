@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { MonthPicker } from "@/components/ui/month-picker";
 import {
   Select,
   SelectContent,
@@ -536,16 +537,14 @@ export function ShopeeOrdersView() {
               <Label className="text-xs font-semibold text-muted-foreground uppercase">
                 Filter Bulan
               </Label>
-              <Input
-                type="month"
+              <MonthPicker
                 value={month}
-                onChange={(e) => {
-                  setMonth(e.target.value);
+                onChange={(val) => {
+                  setMonth(val);
                   setHasFetched(false);
                   setItems([]);
                   setPage(1);
                 }}
-                className="h-9 text-sm"
               />
             </div>
 
