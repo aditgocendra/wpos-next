@@ -260,8 +260,8 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Jika varian cocok dan toko memiliki pemetaan gudang, lakukan penyesuaian stok langsung ke Shopee
-      let stockAdjusted = false;
+      // Refactor: JANGAN langsung sesuaikan stok ke Shopee saat ada kecocokan SKU.
+      // Cukup ambil data stok gudang lokal saat ini agar pengguna dapat memilih lewat checkbox di UI.
       let warehouseStock: number | null = null;
 
       if (matchedVariant && integration.warehouseId) {
@@ -274,41 +274,21 @@ export async function POST(req: NextRequest) {
           },
         });
         warehouseStock = stockRecord ? Math.max(0, stockRecord.stock) : 0;
-        const itemId = parseInt(item.itemId, 10);
-        const modelId = item.modelId ? parseInt(item.modelId, 10) : undefined;
-
-        if (!isNaN(itemId) && shopeeClient) {
-          try {
-            await shopeeClient.product.updateStock({
-              item_id: itemId,
-              stock_list: [
-                {
-                  model_id: modelId || 0,
-                  seller_stock: [
-                    {
-                      stock: warehouseStock,
-                    },
-                  ],
-                },
-              ],
-            });
-            stockAdjusted = true;
-          } catch (stockErr) {
-            console.warn(
-              `Gagal sesuaikan stok Shopee untuk item ${itemId} model ${modelId}:`,
-              stockErr
-            );
-          }
-        }
       }
 
       processedResults.push({
+        itemId: item.itemId,
+        modelId: item.modelId,
         sku: item.sku,
         name: item.name,
         isLinked: !!matchedVariant,
-        localProductName: matchedVariant?.product?.name || null,
+        variantId: matchedVariant?.id || null,
+        localProductName: matchedVariant
+          ? `${matchedVariant.product?.name || "Produk"} (${matchedVariant.variantName})`
+          : null,
         syncStatus: linked.syncStatus,
-        stockAdjusted,
+        stockAdjusted: false, // Tidak langsung disinkronkan secara otomatis
+        shopeeStock: item.stock,
         warehouseStock,
       });
     }

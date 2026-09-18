@@ -150,15 +150,17 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // Aturan Bisnis: Pemotongan stok gudang dan sinkronisasi saat order SHIPPED
-      const isHandedOver =
+      // Aturan Bisnis: Pemotongan stok otomatis saat pesanan masuk/siap kirim (READY_TO_SHIP), diproses, atau diserahkan (SHIPPED)
+      const shouldDeductStock =
+        orderStatus === "READY_TO_SHIP" ||
+        orderStatus === "PROCESSED" ||
         orderStatus === "SHIPPED" ||
         logisticsStatus === "LOGISTICS_PICKUP_DONE" ||
         logisticsStatus === "LOGISTICS_DELIVERY_DONE" ||
         logisticsStatus === "LOGISTICS_SHIPPED" ||
-        (orderStatus === "PROCESSED" && eventCode === 3);
+        (orderStatus === "CONFIRMED" && eventCode === 3);
 
-      if (isHandedOver) {
+      if (shouldDeductStock) {
         let items = undefined;
         const rawItems = orderData.items || orderData.item_list;
         if (Array.isArray(rawItems) && rawItems.length > 0) {
@@ -177,11 +179,13 @@ export async function POST(req: NextRequest) {
           items,
         });
 
-        console.log(`[Shopee Webhook SHIPPED] Order #${orderSn}:`, result);
+        console.log(`[Shopee Webhook Order Deduction] Order #${orderSn} (${orderStatus || logisticsStatus}):`, result);
         return NextResponse.json({
           code: 0,
           message: result.message,
           orderSn,
+          deductions: result.deductions,
+          syncedStoresCount: result.syncedStoresCount,
         });
       }
 
