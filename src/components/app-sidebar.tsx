@@ -28,6 +28,7 @@ import {
   FileSpreadsheetIcon,
   ClipboardCheckIcon,
   ShoppingBagIcon,
+  ClipboardListIcon,
 } from "lucide-react"
 
 const allNavItems = [
@@ -96,6 +97,12 @@ const allNavItems = [
     title: "E-Commerce",
     url: "/integrations",
     icon: <ShoppingBagIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Pesanan Shopee",
+    url: "/integrations/orders",
+    icon: <ClipboardListIcon />,
     roles: ["SUPER_ADMIN"],
   },
 ]
