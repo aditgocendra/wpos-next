@@ -148,12 +148,15 @@ export class ShopeeOrderService {
     }
 
     // Fetch monthly expense for this integration and month
-    const expense = await this.db.shopeeMonthlyExpense.findFirst({
-      where: {
-        integrationId: integration.id,
-        month,
-      },
-    });
+    const expense =
+      "shopeeMonthlyExpense" in this.db && (this.db as any).shopeeMonthlyExpense
+        ? await (this.db as any).shopeeMonthlyExpense.findFirst({
+            where: {
+              integrationId: integration.id,
+              month,
+            },
+          })
+        : null;
 
     const adCost = expense?.adCost || 0;
     const operationalCost = expense?.operationalCost || 0;
@@ -374,10 +377,6 @@ export class ShopeeOrderService {
 
       const allOrderSns = Array.from(orderSnSet);
       if (allOrderSns.length === 0) {
-        // Fallback to sample mock data in development/test if Shopee returns no orders
-        if (process.env.NODE_ENV !== "production") {
-          return await this.generateMockOrdersForMonth(month);
-        }
         return [];
       }
 
@@ -456,13 +455,12 @@ export class ShopeeOrderService {
         }
       }
 
-      return detailedOrders;
+      // Strictly filter orders to ensure they fall within the exact month range
+      return detailedOrders.filter(
+        (ord) => ord.createTime >= timeFrom && ord.createTime <= finalTimeTo
+      );
     } catch (err) {
-      console.warn("[ShopeeOrderService] pullOrdersFromShopee error, falling back:", err);
-      // If dev / test environment, return realistic mock data
-      if (process.env.NODE_ENV !== "production") {
-        return await this.generateMockOrdersForMonth(month);
-      }
+      console.warn("[ShopeeOrderService] pullOrdersFromShopee error:", err);
       return [];
     }
   }
@@ -542,7 +540,10 @@ export class ShopeeOrderService {
    * Get Monthly Expense for a specific integration and month
    */
   async getMonthlyExpense(integrationId: string, month: string) {
-    return this.db.shopeeMonthlyExpense.findFirst({
+    if (!("shopeeMonthlyExpense" in this.db) || !(this.db as any).shopeeMonthlyExpense) {
+      return null;
+    }
+    return (this.db as any).shopeeMonthlyExpense.findFirst({
       where: {
         integrationId,
         month,
@@ -561,9 +562,12 @@ export class ShopeeOrderService {
     unexpectedCost: number;
     notes?: string;
   }) {
+    if (!("shopeeMonthlyExpense" in this.db) || !(this.db as any).shopeeMonthlyExpense) {
+      throw new Error("Model shopeeMonthlyExpense belum tersedia di database.");
+    }
     const { integrationId, month, adCost, operationalCost, unexpectedCost, notes } = params;
 
-    const existing = await this.db.shopeeMonthlyExpense.findFirst({
+    const existing = await (this.db as any).shopeeMonthlyExpense.findFirst({
       where: {
         integrationId,
         month,

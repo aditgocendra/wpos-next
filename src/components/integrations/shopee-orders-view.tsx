@@ -157,6 +157,7 @@ export function ShopeeOrdersView() {
   });
 
   // UI Control States
+  const [hasFetched, setHasFetched] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [exporting, setExporting] = useState<boolean>(false);
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(DEFAULT_VISIBLE_COLUMNS);
@@ -254,14 +255,27 @@ export function ShopeeOrdersView() {
   );
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    if (hasFetched) {
+      fetchOrders();
+    }
+  }, [fetchOrders, hasFetched]);
+
+  const handleManualFetch = () => {
+    if (!selectedIntegrationId) {
+      toast.error("Pilih toko Shopee terlebih dahulu.");
+      return;
+    }
+    setHasFetched(true);
+    fetchOrders(true);
+  };
 
   // Handle Reset Filter Bulan
   const handleResetMonth = () => {
     setMonth(currentMonthStr);
     setSearch("");
     setPage(1);
+    setHasFetched(false);
+    setItems([]);
     toast.info(`Filter bulan direset ke bulan saat ini (${currentMonthStr})`);
   };
 
@@ -445,11 +459,11 @@ export function ShopeeOrdersView() {
         {/* Action Buttons: Export & Refresh */}
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="outline"
+            variant={hasFetched ? "outline" : "default"}
             size="sm"
-            onClick={() => fetchOrders(true)}
+            onClick={handleManualFetch}
             disabled={loading || !selectedIntegrationId}
-            className="h-9"
+            className="h-9 font-medium"
           >
             <RefreshCwIcon className={`h-4 w-4 mr-1.5 ${loading ? "animate-spin" : ""}`} />
             Tarik Pesanan
@@ -492,6 +506,8 @@ export function ShopeeOrdersView() {
                 value={selectedIntegrationId}
                 onValueChange={(val) => {
                   setSelectedIntegrationId(val || "");
+                  setHasFetched(false);
+                  setItems([]);
                   setPage(1);
                 }}
               >
@@ -525,6 +541,8 @@ export function ShopeeOrdersView() {
                 value={month}
                 onChange={(e) => {
                   setMonth(e.target.value);
+                  setHasFetched(false);
+                  setItems([]);
                   setPage(1);
                 }}
                 className="h-9 text-sm"
@@ -836,7 +854,36 @@ export function ShopeeOrdersView() {
               </TableHeader>
 
               <TableBody>
-                {loading ? (
+                {!hasFetched ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-44 text-center p-6">
+                      <div className="flex flex-col items-center justify-center max-w-md mx-auto space-y-3">
+                        <div className="p-3 bg-primary/10 rounded-full text-primary">
+                          <ShoppingBagIcon className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1 text-center">
+                          <h3 className="font-semibold text-sm text-foreground">
+                            Data Pesanan Belum Dimuat
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            Pilih Toko Shopee dan Filter Bulan di atas, kemudian klik tombol{" "}
+                            <span className="font-medium text-foreground">"Tarik Pesanan"</span>{" "}
+                            untuk mengambil data transaksi secara live.
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={handleManualFetch}
+                          disabled={loading || !selectedIntegrationId}
+                          className="h-8 text-xs font-medium"
+                        >
+                          <RefreshCwIcon className={`h-3.5 w-3.5 mr-1.5 ${loading ? "animate-spin" : ""}`} />
+                          Tarik Pesanan Sekarang
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : loading ? (
                   <TableRow>
                     <TableCell
                       colSpan={11}

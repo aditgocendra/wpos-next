@@ -61,7 +61,8 @@ const isStale =
     !("productVariant" in existingPrisma) ||
     !("category" in existingPrisma) ||
     !("stockTransfer" in existingPrisma) ||
-    !("transaction" in existingPrisma));
+    !("transaction" in existingPrisma) ||
+    !("shopeeMonthlyExpense" in existingPrisma));
 
 export const prisma =
   !existingPrisma || isStale ? createExtendedPrismaClient() : existingPrisma;

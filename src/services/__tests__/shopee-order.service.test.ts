@@ -68,8 +68,8 @@ describe("ShopeeOrderService Unit Tests", () => {
         unexpectedCost: 15000,
       });
 
-      // Mock generateMockOrdersForMonth directly for deterministic testing
-      vi.spyOn(service, "generateMockOrdersForMonth").mockResolvedValue([
+      // Mock pullOrdersFromShopee directly for deterministic testing
+      vi.spyOn(service as any, "pullOrdersFromShopee").mockResolvedValue([
         {
           orderSn: "ORD-COMPLETED-1",
           createTime: 1726000000,
@@ -153,7 +153,7 @@ describe("ShopeeOrderService Unit Tests", () => {
         grossIncome: 50000,
       }));
 
-      vi.spyOn(service, "generateMockOrdersForMonth").mockResolvedValue(mockItems);
+      vi.spyOn(service as any, "pullOrdersFromShopee").mockResolvedValue(mockItems);
 
       // Page 1 with limit 10
       const page1 = await service.fetchLiveOrders({
