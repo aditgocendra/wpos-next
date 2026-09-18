@@ -303,6 +303,7 @@ model Integration {
   warehouse    Warehouse?           @relation(fields: [warehouseId], references: [id], onDelete: SetNull)
   products     ProductIntegration[]
   syncJobs     SyncJob[]
+  expenses     ShopeeMonthlyExpense[]
 
   @@map("integrations")
 }
@@ -342,3 +343,21 @@ model SyncJob {
 
   @@map("sync_jobs")
 }
+
+model ShopeeMonthlyExpense {
+  id              String       @id @default(cuid())
+  month           String       // Format: "YYYY-MM"
+  integrationId   String?
+  adCost          Float        @default(0.0) // Biaya Iklan
+  operationalCost Float        @default(0.0) // Biaya Operasional
+  unexpectedCost  Float        @default(0.0) // Biaya Tak Terduga (Minus Order)
+  notes           String?
+  integration     Integration? @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([month, integrationId])
+  @@index([month])
+  @@map("shopee_monthly_expenses")
+}
+

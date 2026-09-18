@@ -42,6 +42,7 @@ import {
   CheckCircle2Icon,
   AlertCircleIcon,
   TruckIcon,
+  ClipboardListIcon,
 } from "lucide-react";
 
 interface Warehouse {
@@ -244,6 +245,14 @@ export function IntegrationsView() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/integrations/orders")}
+          >
+            <ClipboardListIcon className="mr-2 h-4 w-4" />
+            Pesanan Shopee
+          </Button>
           <Button
             variant="outline"
             size="sm"
