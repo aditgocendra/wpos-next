@@ -752,6 +752,34 @@ export class InventoryService {
 
     return { success: true };
   }
+
+  async resetVariantCost(
+    variantId: string,
+    newCost: number,
+    userId: string
+  ): Promise<{ success: boolean; newCost: number }> {
+    if (newCost < 0 || isNaN(newCost)) {
+      throw new Error("Harga modal harus berupa angka yang valid dan tidak boleh negatif");
+    }
+
+    const variant = await this.db.productVariant.findUnique({
+      where: { id: variantId },
+    });
+
+    if (!variant) {
+      throw new Error("Varian produk tidak ditemukan");
+    }
+
+    await this.db.productVariant.update({
+      where: { id: variantId },
+      data: {
+        priceCost: newCost,
+        updatedById: userId,
+      },
+    });
+
+    return { success: true, newCost };
+  }
 }
 
 export const inventoryService = new InventoryService();
