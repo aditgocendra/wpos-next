@@ -59,7 +59,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { toast } from "sonner";
-import type { ProductItem } from "@/services/inventory.service";
+import type { ProductItem, ProductVariantItem } from "@/services/inventory.service";
 import type { CategoryItem } from "@/services/category.service";
 import { InventoryFormDialog } from "@/components/inventory/inventory-form-dialog";
 import {
@@ -72,6 +72,7 @@ import { InventoryAddStockDialog } from "@/components/inventory/inventory-add-st
 import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 import { useCategory } from "@/providers/category-provider";
 import { WarehouseBulkCopyDialog } from "@/components/warehouse/warehouse-bulk-copy-dialog";
+import { InventoryResetCostDialog } from "@/components/inventory/inventory-reset-cost-dialog";
 import type { WarehouseItem } from "@/services/warehouse.service";
 
 const pageSizeItems = [
@@ -115,6 +116,10 @@ export function InventoryTable() {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [selectedProductForDelete, setSelectedProductForDelete] =
     React.useState<ProductItem | null>(null);
+
+  const [resetCostDialogOpen, setResetCostDialogOpen] = React.useState(false);
+  const [selectedVariantForResetCost, setSelectedVariantForResetCost] =
+    React.useState<{ variant: ProductVariantItem; productName: string } | null>(null);
 
   const [bulkCopyDialogOpen, setBulkCopyDialogOpen] = React.useState(false);
 
@@ -873,6 +878,21 @@ export function InventoryTable() {
                                               )}
                                             />
                                           </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-6 text-muted-foreground hover:text-blue-600 hover:bg-blue-600/10"
+                                            title="Reset HPP (Modal)"
+                                            onClick={() => {
+                                              setSelectedVariantForResetCost({
+                                                variant,
+                                                productName: row.original.name,
+                                              });
+                                              setResetCostDialogOpen(true);
+                                            }}
+                                          >
+                                            <RefreshCwIcon className="size-3" />
+                                          </Button>
                                           <Badge
                                             variant="outline"
                                             className="font-mono text-[10px] font-bold px-1.5 py-0 bg-primary/5 text-primary border-primary/20"
@@ -1052,6 +1072,14 @@ export function InventoryTable() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         product={selectedProductForDelete}
+        onSuccess={fetchData}
+      />
+
+      <InventoryResetCostDialog
+        open={resetCostDialogOpen}
+        onOpenChange={setResetCostDialogOpen}
+        variant={selectedVariantForResetCost?.variant || null}
+        productName={selectedVariantForResetCost?.productName || ""}
         onSuccess={fetchData}
       />
 
