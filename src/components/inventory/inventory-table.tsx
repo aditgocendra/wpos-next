@@ -890,10 +890,7 @@ export function InventoryTable() {
                                         Stok
                                       </p>
                                       <p className="font-bold text-foreground">
-                                        {variant.warehouseStocks?.reduce(
-                                          (sum, s) => sum + s.stock,
-                                          0
-                                        ) || 0}
+                                        {variant.stock ?? 0}
                                       </p>
                                     </div>
                                     <div>
