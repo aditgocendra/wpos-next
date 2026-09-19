@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Dropzone } from "@/components/ui/dropzone";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -237,11 +239,11 @@ export function InventoryFormDialog({
   };
 
   // Image upload and client-side compression handler
-  const handleImageFileChange = async (
+  const handleImageDrop = async (
     index: number,
-    e: React.ChangeEvent<HTMLInputElement>
+    files: File[]
   ) => {
-    const file = e.target.files?.[0];
+    const file = files[0];
     if (!file) return;
 
     try {
@@ -276,7 +278,6 @@ export function InventoryFormDialog({
       );
     } finally {
       setCompressingIndices((prev) => ({ ...prev, [index]: false }));
-      e.target.value = "";
     }
   };
 
@@ -691,110 +692,75 @@ export function InventoryFormDialog({
                     </div>
 
                     {/* Variant Image Upload & Preview */}
-                    <div className="pt-2.5 border-t border-border/50">
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          {v.previewUrl || v.image ? (
-                            <div className="relative group/img size-12 rounded-lg overflow-hidden border bg-muted/40 shrink-0">
-                              <Image
-                                src={(v.previewUrl || v.image)!}
-                                alt={v.variantName || "Variant"}
-                                fill
-                                unoptimized
-                                sizes="48px"
-                                className="object-cover"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setZoomImage({
-                                        src: (v.previewUrl || v.image)!,
-                                        title: `${name || "Produk"} - ${v.variantName || "Varian"}`,
-                                      })
-                                    }
-                                    className="p-1 rounded text-white hover:bg-white/20 transition-colors cursor-pointer"
-                                    title="Perbesar gambar"
-                                  >
-                                    <ZoomInIcon className="size-3.5" />
-                                  </button>
-                                  {isSuperAdmin && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleRemoveImage(index)}
-                                      className="p-1 rounded text-white hover:bg-destructive/80 transition-colors cursor-pointer"
-                                      title="Hapus gambar"
-                                    >
-                                      <XIcon className="size-3.5" />
-                                    </button>
-                                  )}
-                                </div>
+                    <div className="pt-2.5 border-t border-border/50 flex justify-start">
+                      <div className='flex items-center gap-2'>
+                        {(v.previewUrl || v.image) ? (
+                          <div className='relative group shrink-0'>
+                            <Image
+                              src={(v.previewUrl || v.image)!}
+                              width={64}
+                              height={64}
+                              alt='icon'
+                              className='border border-slate-200 rounded-md cursor-pointer object-cover size-18'
+                              onClick={() =>
+                                setZoomImage({
+                                  src: (v.previewUrl || v.image)!,
+                                  title: `${name || "Produk"} - ${v.variantName || "Varian"}`,
+                                })
+                              }
+                            />
+                            {isSuperAdmin && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className='absolute bottom-0 right-0 hidden group-hover:flex bg-background/90 hover:bg-destructive text-destructive hover:text-white rounded-tl-md rounded-br-none rounded-bl-none rounded-tr-none size-7'
+                                onClick={() => handleRemoveImage(index)}>
+                                <Trash2Icon className="size-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ) : (
+                          isSuperAdmin && (
+                            compressingIndices[index] ? (
+                              <div className="size-24 rounded-md border-2 border-dashed flex flex-col items-center justify-center p-2 bg-muted text-muted-foreground">
+                                <RefreshCwIcon className="size-6 animate-spin mb-2" />
                               </div>
                             ) : (
-                              <div className="size-12 rounded-lg border border-dashed flex flex-col items-center justify-center text-muted-foreground/50 bg-muted/10 shrink-0">
-                                <ImageIcon className="size-5" />
-                              </div>
-                            )}
+                              <Dropzone
+                                disabled={loading}
+                                onDrop={(acceptedFiles) => handleImageDrop(index, acceptedFiles)}
+                                className='size-18 p-2'
+                              />
+                            )
+                          )
+                        )}
 
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-2">
-                                <Label className="text-xs font-medium text-foreground">
-                                  Foto Varian <span className="text-muted-foreground font-normal text-[11px]">(Opsional)</span>
-                                </Label>
-                                {(v.previewUrl || v.image) && (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-                                    {v.pendingFile ? "Siap Diunggah" : "Tersimpan"}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                {!isSuperAdmin
-                                  ? "Hanya Super Admin yang dapat mengunggah atau mengubah foto varian."
-                                  : v.previewUrl || v.image
-                                  ? v.pendingFile
-                                    ? "Gambar terkompresi lokal. Akan otomatis diunggah saat formulir disimpan."
-                                    : "Gambar tersimpan di storage. Klik untuk melihat pratinjau atau ganti file."
-                                  : "JPG, PNG, atau WebP. Otomatis dikompresi ke WebP maks 512 KB."}
-                              </p>
-                            </div>
+                        <div className='space-y-1'>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs font-medium text-foreground">
+                              Foto Varian <span className="text-muted-foreground font-normal text-[11px]">(Opsional)</span>
+                            </Label>
+                            {(v.previewUrl || v.image) && (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                                {v.pendingFile ? "Siap Diunggah" : "Tersimpan"}
+                              </Badge>
+                            )}
                           </div>
 
-                          {isSuperAdmin && (
-                            <div>
-                              <input
-                                type="file"
-                                id={`variant-image-${index}`}
-                                accept="image/png, image/jpeg, image/jpg, image/webp"
-                                className="hidden"
-                                disabled={loading || compressingIndices[index]}
-                                onChange={(e) => handleImageFileChange(index, e)}
-                              />
-                              <Label
-                                htmlFor={`variant-image-${index}`}
-                                className={cn(
-                                  "inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-medium cursor-pointer transition-colors",
-                                  compressingIndices[index]
-                                    ? "opacity-60 cursor-not-allowed bg-muted"
-                                    : "hover:bg-accent hover:text-accent-foreground bg-background"
-                                )}
-                              >
-                                {compressingIndices[index] ? (
-                                  <>
-                                    <RefreshCwIcon className="size-3 animate-spin text-primary" />
-                                    <span>Mengompresi...</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <UploadCloudIcon className="size-3.5 text-primary" />
-                                    <span>{v.previewUrl || v.image ? "Ganti Foto" : "Unggah Foto"}</span>
-                                  </>
-                                )}
-                              </Label>
-                            </div>
-                          )}
+                          <p className="text-[11px] text-muted-foreground">
+                            {!isSuperAdmin
+                              ? "Hanya Super Admin yang dapat mengunggah atau mengubah foto varian."
+                              : v.previewUrl || v.image
+                                ? v.pendingFile
+                                  ? "Gambar terkompresi lokal. Akan otomatis diunggah saat formulir disimpan."
+                                  : "Gambar tersimpan di storage. Klik untuk melihat pratinjau atau ganti file."
+                                : "JPG, PNG, atau WebP. Otomatis dikompresi ke WebP maks 512 KB."}
+                          </p>
                         </div>
                       </div>
                     </div>
+                  </div>
                 ))}
               </div>
             </div>
