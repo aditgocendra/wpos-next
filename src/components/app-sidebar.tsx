@@ -36,7 +36,7 @@ const allNavItems = [
     title: "Dashboard",
     url: "/",
     icon: <LayoutDashboardIcon />,
-    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN", "CASHIER"],
+    roles: ["SUPER_ADMIN", "WAREHOUSE_ADMIN"],
   },
 
   {

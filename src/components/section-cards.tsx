@@ -10,13 +10,42 @@ import {
 } from "@/components/ui/card"
 import { prisma } from "@/lib/prisma"
 
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+
 export async function SectionCards() {
+  const session = await getServerSession(authOptions)
+  const isWarehouseAdmin = session?.user?.role === "WAREHOUSE_ADMIN"
+  const warehouseId = session?.user?.warehouseId
+
   const [totalProducts, totalVariants, totalCategories, totalWarehouses] =
     await Promise.all([
-      prisma.product.count(),
-      prisma.productVariant.count(),
+      isWarehouseAdmin && warehouseId
+        ? prisma.product.count({
+            where: {
+              variants: {
+                some: {
+                  warehouseStocks: {
+                    some: { warehouseId },
+                  },
+                },
+              },
+            },
+          })
+        : prisma.product.count(),
+      isWarehouseAdmin && warehouseId
+        ? prisma.productVariant.count({
+            where: {
+              warehouseStocks: {
+                some: { warehouseId },
+              },
+            },
+          })
+        : prisma.productVariant.count(),
       prisma.category.count(),
-      prisma.warehouse.count(),
+      isWarehouseAdmin && warehouseId
+        ? prisma.warehouse.count({ where: { id: warehouseId } })
+        : prisma.warehouse.count(),
     ])
 
   return (
