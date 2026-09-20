@@ -2,8 +2,17 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SectionCards } from "@/components/section-cards"
 import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import { redirect } from "next/navigation"
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const session = await getServerSession(authOptions)
+
+  if (session?.user?.role === "CASHIER") {
+    redirect("/transaction")
+  }
+
   return (
     <SidebarProvider
       style={

@@ -526,32 +526,36 @@ export function InventoryTable() {
                 <EyeIcon className="size-4" />
                 <span className="sr-only">Detail</span>
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-primary"
-                title="Edit Produk"
-                onClick={() => {
-                  setSelectedProductForEdit(prod);
-                  setFormDialogOpen(true);
-                }}
-              >
-                <PencilIcon className="size-4" />
-                <span className="sr-only">Edit</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-destructive"
-                title="Hapus Produk"
-                onClick={() => {
-                  setSelectedProductForDelete(prod);
-                  setDeleteDialogOpen(true);
-                }}
-              >
-                <Trash2Icon className="size-4" />
-                <span className="sr-only">Delete</span>
-              </Button>
+              {currentUserRole === "SUPER_ADMIN" && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-primary"
+                    title="Edit Produk"
+                    onClick={() => {
+                      setSelectedProductForEdit(prod);
+                      setFormDialogOpen(true);
+                    }}
+                  >
+                    <PencilIcon className="size-4" />
+                    <span className="sr-only">Edit</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:text-destructive"
+                    title="Hapus Produk"
+                    onClick={() => {
+                      setSelectedProductForDelete(prod);
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2Icon className="size-4" />
+                    <span className="sr-only">Delete</span>
+                  </Button>
+                </>
+              )}
             </div>
           );
         },
@@ -619,16 +623,18 @@ export function InventoryTable() {
             </Button>
           )}
 
-          <Button
-            onClick={() => {
-              setSelectedProductForEdit(null);
-              setFormDialogOpen(true);
-            }}
-            className="gap-2 shadow-sm"
-          >
-            <PlusIcon className="size-4" />
-            <span>Tambah Produk</span>
-          </Button>
+          {currentUserRole === "SUPER_ADMIN" && (
+            <Button
+              onClick={() => {
+                setSelectedProductForEdit(null);
+                setFormDialogOpen(true);
+              }}
+              className="gap-2 shadow-sm"
+            >
+              <PlusIcon className="size-4" />
+              <span>Tambah Produk</span>
+            </Button>
+          )}
         </div>
       </div>
 
