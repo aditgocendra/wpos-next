@@ -1,5 +1,9 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import type { StockOpnameStatus, Role } from "@/generated/prisma/client";
+import {
+  shopeeSyncService as defaultShopeeSyncService,
+  ShopeeSyncService,
+} from "./shopee-sync.service";
 
 export interface OpnameItemInput {
   productId: string;
@@ -38,9 +42,14 @@ export interface UserContext {
 
 export class OpnameService {
   private db: typeof defaultPrisma;
+  private shopeeSync: ShopeeSyncService;
 
-  constructor(customPrisma?: typeof defaultPrisma) {
+  constructor(
+    customPrisma?: typeof defaultPrisma,
+    shopeeSync?: ShopeeSyncService
+  ) {
     this.db = customPrisma || defaultPrisma;
+    this.shopeeSync = shopeeSync || defaultShopeeSyncService;
   }
 
   /**
@@ -202,7 +211,7 @@ export class OpnameService {
     const opnameNumber = await this.generateOpnameNumber(input.warehouseId);
     const targetStatus: StockOpnameStatus = input.status || "DRAFT";
 
-    return await this.db.$transaction(async (tx) => {
+    const createdOpname = await this.db.$transaction(async (tx) => {
       // 1. Create Stock Opname
       const createdOpname = await tx.stockOpname.create({
         data: {
@@ -259,6 +268,23 @@ export class OpnameService {
 
       return createdOpname;
     });
+
+    // 3. Push physical stock updates to connected Shopee stores asynchronously
+    if (targetStatus === "COMPLETED") {
+      this.shopeeSync
+        .pushStockUpdateToShopee(
+          input.warehouseId,
+          input.items.map((item) => ({
+            variantId: item.variantId,
+            quantity: Number(item.actualStock) || 0,
+          }))
+        )
+        .catch((err) => {
+          console.error("Shopee stock push error on opname completion:", err);
+        });
+    }
+
+    return createdOpname;
   }
 
   /**
@@ -289,7 +315,7 @@ export class OpnameService {
 
     const newStatus = input.status || existing.status;
 
-    return await this.db.$transaction(async (tx) => {
+    const updated = await this.db.$transaction(async (tx) => {
       // 1. Update items if provided
       if (input.items && input.items.length > 0) {
         await tx.stockOpnameItem.deleteMany({
@@ -363,6 +389,29 @@ export class OpnameService {
 
       return updated;
     });
+
+    // 4. Push physical stock updates to connected Shopee stores if status becomes COMPLETED
+    if (newStatus === "COMPLETED") {
+      const finalItems =
+        input.items && input.items.length > 0 ? input.items : existing.items;
+
+      this.shopeeSync
+        .pushStockUpdateToShopee(
+          existing.warehouseId,
+          finalItems.map((item) => ({
+            variantId: item.variantId,
+            quantity: Number(item.actualStock) || 0,
+          }))
+        )
+        .catch((err) => {
+          console.error(
+            "Shopee stock push error on opname status update to COMPLETED:",
+            err
+          );
+        });
+    }
+
+    return updated;
   }
 
   /**

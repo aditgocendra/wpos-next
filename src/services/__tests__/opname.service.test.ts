@@ -4,6 +4,7 @@ import { OpnameService } from "../opname.service";
 describe("OpnameService Unit Tests", () => {
   let opnameService: OpnameService;
   let mockPrisma: any;
+  let mockShopeeSync: any;
 
   const sampleWarehouse = {
     id: "wh-1",
@@ -47,6 +48,10 @@ describe("OpnameService Unit Tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    mockShopeeSync = {
+      pushStockUpdateToShopee: vi.fn().mockResolvedValue({ success: true, pushedCount: 1 }),
+    };
+
     mockPrisma = {
       warehouse: {
         findUnique: vi.fn().mockResolvedValue(sampleWarehouse),
@@ -74,7 +79,7 @@ describe("OpnameService Unit Tests", () => {
       }),
     };
 
-    opnameService = new OpnameService(mockPrisma);
+    opnameService = new OpnameService(mockPrisma, mockShopeeSync);
   });
 
   describe("getOpnames", () => {
@@ -193,10 +198,11 @@ describe("OpnameService Unit Tests", () => {
         })
       );
       expect(mockPrisma.productVariantStock.upsert).not.toHaveBeenCalled();
+      expect(mockShopeeSync.pushStockUpdateToShopee).not.toHaveBeenCalled();
       expect(result).toBeDefined();
     });
 
-    it("should synchronize ProductVariantStock when created with status COMPLETED", async () => {
+    it("should synchronize ProductVariantStock and push to Shopee when created with status COMPLETED", async () => {
       await opnameService.createOpname(
         {
           warehouseId: "wh-1",
@@ -229,6 +235,10 @@ describe("OpnameService Unit Tests", () => {
           stock: 15,
         },
       });
+
+      expect(mockShopeeSync.pushStockUpdateToShopee).toHaveBeenCalledWith("wh-1", [
+        { variantId: "var-1", quantity: 15 },
+      ]);
     });
   });
 
@@ -290,6 +300,9 @@ describe("OpnameService Unit Tests", () => {
         },
       });
       expect(mockPrisma.stockOpname.update).toHaveBeenCalled();
+      expect(mockShopeeSync.pushStockUpdateToShopee).toHaveBeenCalledWith("wh-1", [
+        { variantId: "var-1", quantity: 12 },
+      ]);
     });
   });
 
