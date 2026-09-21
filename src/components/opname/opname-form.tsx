@@ -49,6 +49,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  OpnameProductSelectDialog,
+  type InventoryVariant,
+} from "./opname-product-select-dialog";
 
 interface WarehouseOption {
   id: string;
@@ -56,16 +60,6 @@ interface WarehouseOption {
   code: string | null;
 }
 
-interface InventoryVariant {
-  productId: string;
-  productName: string;
-  variantId: string;
-  variantName: string;
-  sku: string;
-  image?: string | null;
-  priceCost: number;
-  stock: number;
-}
 
 interface FormRowItem {
   productId: string;
@@ -100,6 +94,9 @@ export function OpnameForm() {
 
   // Complete confirmation dialog
   const [confirmCompleteOpen, setConfirmCompleteOpen] = React.useState(false);
+
+  // Product selection dialog
+  const [productDialogOpen, setProductDialogOpen] = React.useState(false);
 
   // Fetch warehouses list
   React.useEffect(() => {
@@ -180,17 +177,14 @@ export function OpnameForm() {
     }
   }, [selectedWarehouseId, fetchWarehouseCatalog]);
 
-  // Add all variants to form
-  const handleAddAllCatalog = () => {
-    if (catalog.length === 0) {
-      toast.info("Tidak ada varian barang di gudang ini");
-      return;
-    }
 
+
+  // Add multiple selected variants from dialog
+  const handleAddSelectedVariants = (selectedVariants: InventoryVariant[]) => {
     const existingIds = new Set(items.map((i) => i.variantId));
     const newItems: FormRowItem[] = [];
 
-    for (const v of catalog) {
+    for (const v of selectedVariants) {
       if (!existingIds.has(v.variantId)) {
         newItems.push({
           productId: v.productId,
@@ -201,19 +195,19 @@ export function OpnameForm() {
           image: v.image,
           priceCost: v.priceCost,
           systemStock: v.stock,
-          actualStock: v.stock, // default to current system stock
+          actualStock: v.stock,
           notes: "",
         });
       }
     }
 
     if (newItems.length === 0) {
-      toast.info("Semua barang katalog sudah dimasukkan ke dalam daftar");
+      toast.info("Semua barang terpilih sudah ada di dalam tabel");
       return;
     }
 
     setItems((prev) => [...prev, ...newItems]);
-    toast.success(`Berhasil menambahkan ${newItems.length} varian barang ke tabel audit`);
+    toast.success(`Berhasil menambahkan ${newItems.length} barang ke tabel opname`);
   };
 
   // Add single variant to form
@@ -251,9 +245,9 @@ export function OpnameForm() {
       prev.map((item) =>
         item.variantId === variantId
           ? {
-              ...item,
-              actualStock: val === "" ? "" : Math.max(0, parseInt(val, 10) || 0),
-            }
+            ...item,
+            actualStock: val === "" ? "" : Math.max(0, parseInt(val, 10) || 0),
+          }
           : item
       )
     );
@@ -529,8 +523,8 @@ export function OpnameForm() {
               summary.totalDifferenceValue > 0
                 ? "text-emerald-600 dark:text-emerald-400"
                 : summary.totalDifferenceValue < 0
-                ? "text-rose-600 dark:text-rose-400"
-                : "text-foreground"
+                  ? "text-rose-600 dark:text-rose-400"
+                  : "text-foreground"
             )}
           >
             Rp {summary.totalDifferenceValue.toLocaleString("id-ID")}
@@ -550,18 +544,25 @@ export function OpnameForm() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
               size="sm"
-              onClick={handleAddAllCatalog}
+              onClick={() => {
+                if (!selectedWarehouseId) {
+                  toast.error("Pilih gudang terlebih dahulu");
+                  return;
+                }
+                setProductDialogOpen(true);
+              }}
               disabled={loadingCatalog || catalog.length === 0}
               className="gap-1.5 text-xs"
             >
-              <LayersIcon className="size-3.5 text-primary" />
-              <span>Tambah Semua Barang ({catalog.length})</span>
+              <PlusIcon className="size-3.5" />
+              <span>Pilih Barang ({catalog.length})</span>
             </Button>
+
+
           </div>
         </div>
 
@@ -817,6 +818,17 @@ export function OpnameForm() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Product Selection Dialog */}
+      <OpnameProductSelectDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        catalog={catalog}
+        existingVariantIds={items.map((i) => i.variantId)}
+        onAddVariants={handleAddSelectedVariants}
+        loading={loadingCatalog}
+        warehouseName={selectedWarehouseObj?.name}
+      />
     </div>
   );
 }
