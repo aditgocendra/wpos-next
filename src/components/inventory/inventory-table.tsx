@@ -722,7 +722,7 @@ export function InventoryTable() {
       )}
 
       {/* Data Table */}
-      <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
+      <div className="hidden md:block rounded-xl border bg-card shadow-xs overflow-hidden">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -958,6 +958,239 @@ export function InventoryTable() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Mobile Card List */}
+      <div className="grid grid-cols-1 gap-4 md:hidden">
+        {loading ? (
+          <div className="flex h-32 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <RefreshCwIcon className="size-4 animate-spin text-primary" />
+            <span>Memuat data inventaris produk...</span>
+          </div>
+        ) : table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => {
+            const prod = row.original;
+            const isExp = row.getIsExpanded();
+            const prodImg = prod.variants[0]?.image || null;
+            const stock = prod.totalStock;
+            const isOutOfStock = stock <= 0;
+            const isLowStock = stock > 0 && stock <= 5;
+
+            const prices = prod.variants.map((v) => v.priceSell || 0);
+            const minPrice = prices.length ? Math.min(...prices) : 0;
+            const maxPrice = prices.length ? Math.max(...prices) : 0;
+            const priceDisplay =
+              prices.length === 0
+                ? formatRupiah(0)
+                : minPrice === maxPrice
+                ? formatRupiah(minPrice)
+                : `${formatRupiah(minPrice)} - ${formatRupiah(maxPrice)}`;
+
+            return (
+              <div key={row.id} className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-xs">
+                <div className="p-3 flex gap-3">
+                  {prodImg ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setZoomImage({ src: prodImg, title: prod.name });
+                      }}
+                      className="relative size-16 shrink-0 rounded-lg overflow-hidden border bg-muted"
+                    >
+                      <Image src={prodImg} alt={prod.name} fill unoptimized sizes="64px" className="object-cover" />
+                    </button>
+                  ) : (
+                    <div className="flex size-16 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <BoxesIcon className="size-6" />
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 flex flex-col justify-center">
+                    <h3 className="font-semibold text-sm leading-tight text-foreground truncate">{prod.name}</h3>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      <span className="text-xs font-medium text-muted-foreground">{stock} Stok</span>
+                      <span className="text-muted-foreground/50 text-[10px]">•</span>
+                      <span className="text-xs text-muted-foreground">{prod.variants.length} SKU</span>
+                      <Badge
+                        className={cn(
+                          "text-[9px] px-1.5 py-0 font-normal h-4 leading-4 ml-auto",
+                          isOutOfStock
+                            ? "bg-destructive/10 text-destructive border-destructive/20"
+                            : isLowStock
+                            ? "bg-amber-600/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            : "bg-green-600/10 text-green-600 dark:text-green-400 border-green-500/20"
+                        )}
+                        variant="outline"
+                      >
+                        {isOutOfStock ? "Habis" : isLowStock ? "Rendah" : "Tersedia"}
+                      </Badge>
+                    </div>
+                    <div className="font-bold text-primary text-sm mt-1.5">{priceDisplay}</div>
+                  </div>
+                </div>
+
+                <div className="bg-muted/30 px-2 py-1.5 border-t flex items-center justify-between">
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-[#EE4D2D] hover:bg-[#EE4D2D]/10"
+                      disabled={syncingProductId === prod.id}
+                      onClick={() => handleSyncProductStock(prod)}
+                    >
+                      <ShoppingBagIcon className={cn("size-4 text-[#EE4D2D]", syncingProductId === prod.id && "animate-spin")} />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-green-600"
+                      onClick={() => {
+                        setSelectedProductForAddStock(prod);
+                        setAddStockDialogOpen(true);
+                      }}
+                    >
+                      <PackagePlusIcon className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground"
+                      onClick={() => {
+                        setSelectedProductForDetail(prod);
+                        setDetailDialogOpen(true);
+                      }}
+                    >
+                      <EyeIcon className="size-4" />
+                    </Button>
+                    {currentUserRole === "SUPER_ADMIN" && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-primary"
+                          onClick={() => {
+                            setSelectedProductForEdit(prod);
+                            setFormDialogOpen(true);
+                          }}
+                        >
+                          <PencilIcon className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => {
+                            setSelectedProductForDelete(prod);
+                            setDeleteDialogOpen(true);
+                          }}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-muted-foreground hover:bg-primary/10 hover:text-primary shrink-0"
+                    onClick={() => row.toggleExpanded()}
+                  >
+                    <ChevronDownIcon className={cn("size-5 transition-transform duration-200", isExp && "rotate-180 text-primary")} />
+                  </Button>
+                </div>
+
+                {isExp && (
+                  <div className="bg-muted/20 border-t p-3">
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {prod.variants.map((variant) => {
+                        const variantImg = variant.image || null;
+                        return (
+                          <div key={variant.id} className="rounded-lg border bg-card p-3 shadow-2xs space-y-2">
+                            <div className="flex items-center gap-2.5">
+                              {variantImg ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setZoomImage({
+                                      src: variantImg,
+                                      title: `${prod.name} - ${variant.variantName}`,
+                                    });
+                                  }}
+                                  className="relative group/img size-9 shrink-0 rounded-md overflow-hidden border bg-muted"
+                                >
+                                  <Image src={variantImg} alt={variant.variantName} fill unoptimized sizes="36px" className="object-cover" />
+                                </button>
+                              ) : (
+                                <div className="size-9 shrink-0 rounded-md border border-dashed flex items-center justify-center text-muted-foreground/40 bg-muted/10">
+                                  <ImageIcon className="size-4" />
+                                </div>
+                              )}
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-semibold text-xs text-foreground truncate">{variant.variantName}</span>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-6 text-muted-foreground"
+                                      disabled={syncingVariantId === variant.id}
+                                      onClick={() => handleSyncVariantStock(variant.id, prod.name, variant.variantName)}
+                                    >
+                                      <ShoppingBagIcon className={cn("size-3 text-[#EE4D2D]", syncingVariantId === variant.id && "animate-spin")} />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-6 text-muted-foreground"
+                                      onClick={() => {
+                                        setSelectedVariantForResetCost({ variant, productName: prod.name });
+                                        setResetCostDialogOpen(true);
+                                      }}
+                                    >
+                                      <RefreshCwIcon className="size-3" />
+                                    </Button>
+                                    <Badge variant="outline" className="font-mono text-[10px] font-bold px-1.5 py-0">
+                                      {variant.sku}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1 text-[11px] pt-1.5 border-t">
+                              <div>
+                                <p className="text-muted-foreground text-[10px]">Stok</p>
+                                <p className="font-bold text-foreground">{variant.stock ?? 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground text-[10px]">Modal (HPP)</p>
+                                <p className="font-medium text-foreground">{formatRupiah(variant.priceCost)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground text-[10px]">Harga Jual</p>
+                                <p className="font-bold text-primary">{formatRupiah(variant.priceSell)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex h-32 items-center justify-center text-center text-sm text-muted-foreground">
+            {searchQuery || selectedWarehouseFilter !== "ALL" || selectedCategoryFilter !== "ALL"
+              ? "Tidak ada produk yang sesuai dengan filter pencarian."
+              : 'Belum ada data inventaris produk.'}
+          </div>
+        )}
       </div>
 
       {/* Pagination Footer */}
