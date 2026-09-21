@@ -25,7 +25,7 @@ export async function PATCH(
 
     const { variantId } = await params;
     const body = await req.json();
-    const { priceCost } = body;
+    const { priceCost, warehouseId } = body;
 
     if (priceCost === undefined || priceCost === null || isNaN(Number(priceCost))) {
       return NextResponse.json(
@@ -34,8 +34,16 @@ export async function PATCH(
       );
     }
 
+    if (!warehouseId) {
+      return NextResponse.json(
+        { error: "Gudang asal wajib dikirim" },
+        { status: 400 }
+      );
+    }
+
     const result = await inventoryService.resetVariantCost(
       variantId,
+      warehouseId,
       Number(priceCost),
       session.user.id
     );

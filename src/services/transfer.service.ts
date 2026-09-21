@@ -279,17 +279,33 @@ export class TransferService {
           throw new Error(`INSUFFICIENT_STOCK: Stok tidak mencukupi untuk varian asal (Tersedia: ${sourceStock}, Dibutuhkan: ${item.quantity})`);
         }
 
+        const sourceVariantStock = await tx.productVariantStock.findUnique({
+          where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: transfer.sourceWarehouseId } }
+        });
+        const sourceHpp = sourceVariantStock?.priceCost || 0;
+
+        const destVariantStock = await tx.productVariantStock.findUnique({
+          where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId } }
+        });
+        const destOldStock = destVariantStock ? destVariantStock.stock : 0;
+        const destOldHpp = destVariantStock ? destVariantStock.priceCost : 0;
+
+        const destNewStock = destOldStock + item.quantity;
+        const destNewHpp = destNewStock > 0 
+           ? Math.round((((destOldStock * destOldHpp) + (item.quantity * sourceHpp)) / destNewStock) * 100) / 100
+           : sourceHpp;
+
         // Decrement stock at source warehouse variant stock
         await tx.productVariantStock.update({
           where: { id: sourceStockRecord.id },
           data: { stock: { decrement: item.quantity } },
         });
 
-        // Add stock to destination warehouse variant stock
+        // Add stock to destination warehouse variant stock and update HPP
         await tx.productVariantStock.upsert({
           where: { variantId_warehouseId: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId } },
-          update: { stock: { increment: item.quantity } },
-          create: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId, stock: item.quantity }
+          update: { stock: { increment: item.quantity }, priceCost: destNewHpp },
+          create: { variantId: item.variantId, warehouseId: transfer.destinationWarehouseId, stock: item.quantity, priceCost: destNewHpp }
         });
       }
 

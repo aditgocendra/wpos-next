@@ -333,7 +333,7 @@ export class TransactionService {
         }
 
         const price = variant.priceSell || 0;
-        const costPrice = variant.priceCost || 0; // Removed avgCostPrice fallback since product no longer has it
+        const costPrice = stockRecord?.priceCost || variant.priceCost || 0;
         const itemTotalPrice = price * item.quantity;
 
         totalAmount += itemTotalPrice;
@@ -530,7 +530,7 @@ export class TransactionService {
           }
 
           const price = variant.priceSell || 0;
-          const costPrice = variant.priceCost || 0;
+          const costPrice = stockRecord?.priceCost || variant.priceCost || 0;
           const itemTotalPrice = price * item.quantity;
 
           totalAmount += itemTotalPrice;

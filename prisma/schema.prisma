@@ -150,6 +150,7 @@ model ProductVariantStock {
   variantId   String
   warehouseId String
   stock       Int    @default(0)
+  priceCost   Float  @default(0.0) // Per-warehouse HPP
 
   variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
   warehouse Warehouse      @relation(fields: [warehouseId], references: [id], onDelete: Cascade)

@@ -93,34 +93,41 @@ export function InventoryAddStockDialog({
     return record ? record.stock : 0;
   };
 
+  const getVariantCostInWarehouse = (vId: string, wId: string) => {
+    if (!product) return 0;
+    const v = product.variants.find((item) => item.id === vId);
+    if (!v || !v.warehouseStocks) return v?.priceCost || 0;
+    const record = v.warehouseStocks.find((ws) => ws.warehouseId === wId);
+    return record ? (record.priceCost ?? v.priceCost) : v.priceCost;
+  };
+
   const calculationPreview = React.useMemo(() => {
     if (!product || !selectedVariant || !warehouseId) return null;
 
-    const oldProductStock = product.totalStock;
-    const oldProductAvgCost = product.avgCostPrice;
     const addedQty = Math.max(0, Math.floor(Number(stock) || 0));
     const newPriceCost = Math.max(0, Number(priceCost) || 0);
 
-    const newProductTotalStock = oldProductStock + addedQty;
-    const newProductAvgCost =
-      newProductTotalStock > 0
-        ? Math.round(
-            (((oldProductStock * oldProductAvgCost) + (addedQty * newPriceCost)) /
-              newProductTotalStock) *
-              100
-          ) / 100
-        : newPriceCost;
-
     const currentVariantWarehouseStock = getVariantStockInWarehouse(selectedVariant.id, warehouseId);
+    const currentVariantWarehouseCost = getVariantCostInWarehouse(selectedVariant.id, warehouseId);
+
     const newVariantStock = currentVariantWarehouseStock + addedQty;
+    const newVariantAvgCost = newVariantStock > 0
+      ? Math.round(
+          (((currentVariantWarehouseStock * currentVariantWarehouseCost) + (addedQty * newPriceCost)) /
+            newVariantStock) *
+            100
+        ) / 100
+      : newPriceCost;
+
+    const newProductTotalStock = product.totalStock + addedQty;
 
     return {
       addedQty,
       newPriceCost,
       newProductTotalStock,
-      newProductAvgCost,
       currentVariantWarehouseStock,
       newVariantStock,
+      newVariantAvgCost,
     };
   }, [product, selectedVariant, warehouseId, stock, priceCost]);
 
@@ -343,10 +350,10 @@ export function InventoryAddStockDialog({
                 <div className="border-t pt-2 mt-1 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <TrendingUpIcon className="size-3.5 text-blue-500" />
-                    <span className="text-muted-foreground font-medium">HPP Baru (Moving Avg):</span>
+                    <span className="text-muted-foreground font-medium">HPP Varian Baru (Moving Avg):</span>
                   </div>
                   <span className="font-bold text-sm text-foreground">
-                    {formatRupiah(calculationPreview.newProductAvgCost)}
+                    {formatRupiah(calculationPreview.newVariantAvgCost)}
                   </span>
                 </div>
               </div>
