@@ -61,6 +61,7 @@ import {
 } from "@/components/transaction/transaction-detail-dialog";
 import { TransactionFormDialog } from "@/components/transaction/transaction-form-dialog";
 import { TransactionDeleteDialog } from "@/components/transaction/transaction-delete-dialog";
+import { useSession } from "next-auth/react";
 
 const pageSizeItems = [
   { label: "5", value: "5" },
@@ -74,8 +75,9 @@ export function TransactionTable() {
   const [warehouses, setWarehouses] = React.useState<
     { id: string; name: string; code?: string | null }[]
   >([]);
-  const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(null);
-  const [userWarehouseId, setUserWarehouseId] = React.useState<string | null>(null);
+  const { data: session } = useSession();
+  const currentUserRole = session?.user?.role || null;
+  const userWarehouseId = session?.user?.warehouseId || null;
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -102,20 +104,21 @@ export function TransactionTable() {
   const [detailTransaction, setDetailTransaction] = React.useState<TransactionData | null>(null);
   const [deleteTransaction, setDeleteTransaction] = React.useState<TransactionData | null>(null);
 
-  // Fetch initial session info and warehouses
+  // Set initial warehouse filter based on role
+  React.useEffect(() => {
+    if (
+      (currentUserRole === "WAREHOUSE_ADMIN" || currentUserRole === "CASHIER") &&
+      userWarehouseId &&
+      selectedWarehouseFilter === "ALL"
+    ) {
+      setSelectedWarehouseFilter(userWarehouseId);
+    }
+  }, [currentUserRole, userWarehouseId, selectedWarehouseFilter]);
+
+  // Fetch warehouses
   const fetchInitialData = React.useCallback(async () => {
     try {
-      const [sessionRes, whRes] = await Promise.all([
-        fetch("/api/auth/session"),
-        fetch("/api/warehouses"),
-      ]);
-
-      const sessionData = await sessionRes.json();
-      if (sessionData?.user) {
-        setCurrentUserRole(sessionData.user.role);
-        setUserWarehouseId(sessionData.user.warehouseId || null);
-      }
-
+      const whRes = await fetch("/api/warehouses");
       const whData = await whRes.json();
       if (whData?.warehouses) {
         setWarehouses(whData.warehouses);

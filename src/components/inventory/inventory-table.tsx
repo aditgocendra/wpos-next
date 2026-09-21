@@ -74,6 +74,7 @@ import { useCategory } from "@/providers/category-provider";
 import { WarehouseBulkCopyDialog } from "@/components/warehouse/warehouse-bulk-copy-dialog";
 import { InventoryResetCostDialog } from "@/components/inventory/inventory-reset-cost-dialog";
 import type { WarehouseItem } from "@/services/warehouse.service";
+import { useSession } from "next-auth/react";
 
 const pageSizeItems = [
   { label: "10", value: "10" },
@@ -217,34 +218,29 @@ export function InventoryTable() {
 
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
 
-  const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(null);
-  const [userWarehouseId, setUserWarehouseId] = React.useState<string | null>(null);
+  const { data: session } = useSession();
+  const currentUserRole = session?.user?.role || null;
+  const userWarehouseId = session?.user?.warehouseId || null;
 
-  // Load warehouses & session once on mount
+  // Set initial warehouse filter based on role
+  React.useEffect(() => {
+    if (
+      (currentUserRole === "WAREHOUSE_ADMIN" || currentUserRole === "CASHIER") &&
+      userWarehouseId &&
+      selectedWarehouseFilter === "ALL"
+    ) {
+      setSelectedWarehouseFilter(userWarehouseId);
+    }
+  }, [currentUserRole, userWarehouseId, selectedWarehouseFilter]);
+
+  // Load warehouses once on mount
   React.useEffect(() => {
     async function loadInitialData() {
       try {
-        const [whRes, sessionRes] = await Promise.all([
-          fetch("/api/warehouses"),
-          fetch("/api/auth/session"),
-        ]);
+        const whRes = await fetch("/api/warehouses");
         if (whRes.ok) {
           const whData = await whRes.json();
           setWarehouses(whData.warehouses || []);
-        }
-        if (sessionRes.ok) {
-          const sessionData = await sessionRes.json();
-          if (sessionData?.user) {
-            setCurrentUserRole(sessionData.user.role || null);
-            setUserWarehouseId(sessionData.user.warehouseId || null);
-            if (
-              (sessionData.user.role === "WAREHOUSE_ADMIN" ||
-                sessionData.user.role === "CASHIER") &&
-              sessionData.user.warehouseId
-            ) {
-              setSelectedWarehouseFilter(sessionData.user.warehouseId);
-            }
-          }
         }
       } catch {
         // ignore
