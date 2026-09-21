@@ -1,5 +1,9 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import type { TransferStatus } from "@/generated/prisma/client";
+import {
+  shopeeSyncService as defaultShopeeSyncService,
+  ShopeeSyncService,
+} from "./shopee-sync.service";
 
 export interface TransferItemInput {
   productId: string;
@@ -61,7 +65,16 @@ export interface StockTransferData {
 }
 
 export class TransferService {
-  constructor(private db = defaultPrisma) {}
+  private db: typeof defaultPrisma;
+  private shopeeSync: ShopeeSyncService;
+
+  constructor(
+    customPrisma?: typeof defaultPrisma,
+    shopeeSync?: ShopeeSyncService
+  ) {
+    this.db = customPrisma || defaultPrisma;
+    this.shopeeSync = shopeeSync || defaultShopeeSyncService;
+  }
 
   /**
    * Helper to generate unique transfer number: TRF-YYYYMMDD-XXXX
@@ -222,7 +235,7 @@ export class TransferService {
     transferId: string,
     userId: string
   ): Promise<StockTransferData> {
-    return await this.db.$transaction(async (tx) => {
+    const formattedTransfer = await this.db.$transaction(async (tx) => {
       const transfer = await tx.stockTransfer.findUnique({
         where: { id: transferId },
         include: {
@@ -303,6 +316,48 @@ export class TransferService {
 
       return this.formatTransfer(updatedTransfer);
     });
+
+    // 5. Push stock updates to connected Shopee stores for both source and destination warehouses asynchronously
+    const syncItems = formattedTransfer.items.map((item) => ({
+      variantId: item.variantId,
+      sku: item.sku && item.sku !== "-" ? item.sku : undefined,
+    }));
+
+    Promise.allSettled([
+      this.shopeeSync.pushStockUpdateToShopee(
+        formattedTransfer.sourceWarehouseId,
+        syncItems
+      ),
+      this.shopeeSync.pushStockUpdateToShopee(
+        formattedTransfer.destinationWarehouseId,
+        syncItems
+      ),
+    ])
+      .then((results) => {
+        results.forEach((res, idx) => {
+          const whType = idx === 0 ? "source" : "destination";
+          const whId =
+            idx === 0
+              ? formattedTransfer.sourceWarehouseId
+              : formattedTransfer.destinationWarehouseId;
+          if (res.status === "rejected") {
+            console.error(
+              `Shopee sync rejected for ${whType} warehouse (${whId}) on transfer ${transferId}:`,
+              res.reason
+            );
+          } else if (res.value.errors && res.value.errors.length > 0) {
+            console.warn(
+              `Shopee sync warning for ${whType} warehouse (${whId}) on transfer ${transferId}:`,
+              res.value.errors
+            );
+          }
+        });
+      })
+      .catch((err) => {
+        console.error("Shopee stock push error on transfer execute:", err);
+      });
+
+    return formattedTransfer;
   }
 
   /**

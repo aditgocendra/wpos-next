@@ -4,6 +4,7 @@ import { TransferService } from "../transfer.service";
 describe("TransferService Unit Tests", () => {
   let transferService: TransferService;
   let mockPrisma: any;
+  let mockShopeeSync: any;
 
   const sampleWarehouseSource = {
     id: "wh-source",
@@ -80,6 +81,10 @@ describe("TransferService Unit Tests", () => {
   };
 
   beforeEach(() => {
+    mockShopeeSync = {
+      pushStockUpdateToShopee: vi.fn().mockResolvedValue({ success: true, pushedCount: 1 }),
+    };
+
     mockPrisma = {
       warehouse: {
         findUnique: vi.fn(),
@@ -116,7 +121,7 @@ describe("TransferService Unit Tests", () => {
       $transaction: vi.fn((callback) => callback(mockPrisma)),
     };
 
-    transferService = new TransferService(mockPrisma as any);
+    transferService = new TransferService(mockPrisma as any, mockShopeeSync as any);
   });
 
   describe("createTransferOrder", () => {
@@ -245,6 +250,40 @@ describe("TransferService Unit Tests", () => {
       await expect(
         transferService.executeTransfer("trf-123", "usr-admin")
       ).rejects.toThrow("Transfer tidak dapat dieksekusi karena status saat ini: TRANSFERED");
+    });
+
+    it("should push stock updates to Shopee for both source and destination warehouses when transfer is executed", async () => {
+      mockPrisma.stockTransfer.findUnique.mockResolvedValue(sampleTransfer);
+      mockPrisma.productVariant.findUnique.mockResolvedValue(sampleVariantSource);
+      mockPrisma.stockTransfer.update.mockResolvedValue({
+        ...sampleTransfer,
+        status: "TRANSFERED",
+      });
+
+      await transferService.executeTransfer("trf-123", "usr-admin");
+
+      expect(mockShopeeSync.pushStockUpdateToShopee).toHaveBeenCalledWith(
+        "wh-source",
+        [{ variantId: "var-1", sku: "CLO-FLA-L-RED" }]
+      );
+      expect(mockShopeeSync.pushStockUpdateToShopee).toHaveBeenCalledWith(
+        "wh-dest",
+        [{ variantId: "var-1", sku: "CLO-FLA-L-RED" }]
+      );
+    });
+
+    it("should not throw error if Shopee sync fails during executeTransfer", async () => {
+      mockPrisma.stockTransfer.findUnique.mockResolvedValue(sampleTransfer);
+      mockPrisma.productVariant.findUnique.mockResolvedValue(sampleVariantSource);
+      mockPrisma.stockTransfer.update.mockResolvedValue({
+        ...sampleTransfer,
+        status: "TRANSFERED",
+      });
+
+      mockShopeeSync.pushStockUpdateToShopee.mockRejectedValue(new Error("Shopee API timeout"));
+
+      const result = await transferService.executeTransfer("trf-123", "usr-admin");
+      expect(result.status).toBe("TRANSFERED");
     });
   });
 
