@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyShopeeWebhookSignature } from "@/lib/shopee/client";
 import { shopeeSyncService } from "@/services/shopee-sync.service";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   return NextResponse.json({
@@ -11,6 +12,19 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Cek Pengaturan Global "Terima Webhook Shopee"
+    const webhookSetting = await prisma.systemSetting.findUnique({
+      where: { key: "SHOPEE_WEBHOOK_ENABLED" },
+    });
+
+    if (webhookSetting && webhookSetting.value === "false") {
+      console.log("[Shopee Webhook] Webhook diabaikan karena pengaturan SHOPEE_WEBHOOK_ENABLED dimatikan.");
+      return NextResponse.json({
+        code: 0,
+        message: "Webhook paused/disabled globally via system settings.",
+      });
+    }
+
     const rawBody = await req.text();
     const signature = req.headers.get("authorization") || req.headers.get("Authorization") || "";
     const url = req.nextUrl.toString();

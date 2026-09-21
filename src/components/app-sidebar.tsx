@@ -29,6 +29,7 @@ import {
   ClipboardCheckIcon,
   ShoppingBagIcon,
   ClipboardListIcon,
+  SettingsIcon,
 } from "lucide-react"
 
 const allNavItems = [
@@ -97,6 +98,12 @@ const allNavItems = [
     title: "E-Commerce",
     url: "/integrations",
     icon: <ShoppingBagIcon />,
+    roles: ["SUPER_ADMIN"],
+  },
+  {
+    title: "Settings",
+    url: "/settings",
+    icon: <SettingsIcon />,
     roles: ["SUPER_ADMIN"],
   },
   {
