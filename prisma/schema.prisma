@@ -361,3 +361,13 @@ model ShopeeMonthlyExpense {
   @@map("shopee_monthly_expenses")
 }
 
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
