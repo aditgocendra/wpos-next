@@ -886,6 +886,10 @@ export function InventoryTable() {
                                             className="size-6 text-muted-foreground hover:text-blue-600 hover:bg-blue-600/10"
                                             title="Reset HPP (Modal)"
                                             onClick={() => {
+                                              if (selectedWarehouseFilter === "ALL") {
+                                                toast.error("Silakan filter gudang terlebih dahulu untuk mereset HPP.");
+                                                return;
+                                              }
                                               setSelectedVariantForResetCost({
                                                 variant,
                                                 productName: row.original.name,
@@ -1147,7 +1151,14 @@ export function InventoryTable() {
                                       size="icon"
                                       className="size-6 text-muted-foreground"
                                       onClick={() => {
-                                        setSelectedVariantForResetCost({ variant, productName: prod.name });
+                                        if (selectedWarehouseFilter === "ALL") {
+                                          toast.error("Silakan filter gudang terlebih dahulu untuk mereset HPP.");
+                                          return;
+                                        }
+                                        setSelectedVariantForResetCost({
+                                          variant,
+                                          productName: prod.name,
+                                        });
                                         setResetCostDialogOpen(true);
                                       }}
                                     >
@@ -1315,6 +1326,7 @@ export function InventoryTable() {
         onOpenChange={setResetCostDialogOpen}
         variant={selectedVariantForResetCost?.variant || null}
         productName={selectedVariantForResetCost?.productName || ""}
+        warehouseId={selectedWarehouseFilter}
         onSuccess={fetchData}
       />
 

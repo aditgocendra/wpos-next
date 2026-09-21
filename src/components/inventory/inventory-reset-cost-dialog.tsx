@@ -21,6 +21,7 @@ interface InventoryResetCostDialogProps {
   onOpenChange: (open: boolean) => void;
   variant: ProductVariantItem | null;
   productName: string;
+  warehouseId: string;
   onSuccess: () => void;
 }
 
@@ -29,6 +30,7 @@ export function InventoryResetCostDialog({
   onOpenChange,
   variant,
   productName,
+  warehouseId,
   onSuccess,
 }: InventoryResetCostDialogProps) {
   const [loading, setLoading] = React.useState(false);
@@ -52,6 +54,11 @@ export function InventoryResetCostDialog({
       return;
     }
 
+    if (!warehouseId || warehouseId === "ALL") {
+      toast.error("Gudang harus dipilih");
+      return;
+    }
+
     try {
       setLoading(true);
       const res = await fetch(`/api/inventory/variants/${variant.id}/cost`, {
@@ -59,7 +66,7 @@ export function InventoryResetCostDialog({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ priceCost: costNum }),
+        body: JSON.stringify({ priceCost: costNum, warehouseId }),
       });
 
       const data = await res.json();

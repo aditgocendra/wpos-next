@@ -11,6 +11,7 @@ export interface ProductVariantStockItem {
     code: string | null;
   };
   stock: number;
+  priceCost: number;
 }
 
 export interface ProductVariantItem {
@@ -215,7 +216,11 @@ export class InventoryService {
         const variantStock = relevantStocks.reduce((sum, s) => sum + s.stock, 0);
         
         productTotalStock += variantStock;
-        totalCostSum += (variantStock * v.priceCost);
+        totalCostSum += relevantStocks.reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0);
+
+        const avgVariantCost = relevantStocks.length > 0 
+          ? relevantStocks.reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / (variantStock || 1)
+          : v.priceCost;
 
         return {
           id: v.id,
@@ -225,7 +230,7 @@ export class InventoryService {
           image: v.image || null,
           stock: variantStock,
           priceSell: v.priceSell,
-          priceCost: v.priceCost,
+          priceCost: variantStock > 0 ? avgVariantCost : v.priceCost,
           warehouseStocks: v.warehouseStocks,
           createdById: v.createdById,
           updatedById: v.updatedById,
@@ -303,7 +308,11 @@ export class InventoryService {
     const mappedVariants = product.variants.map((v) => {
       const variantStock = (v.warehouseStocks || []).reduce((sum, s) => sum + s.stock, 0);
       productTotalStock += variantStock;
-      totalCostSum += (variantStock * v.priceCost);
+      totalCostSum += (v.warehouseStocks || []).reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0);
+
+      const avgVariantCost = (v.warehouseStocks || []).length > 0
+        ? (v.warehouseStocks || []).reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / (variantStock || 1)
+        : v.priceCost;
 
       return {
         id: v.id,
@@ -313,7 +322,7 @@ export class InventoryService {
         image: v.image || null,
         stock: variantStock,
         priceSell: v.priceSell,
-        priceCost: v.priceCost,
+        priceCost: variantStock > 0 ? avgVariantCost : v.priceCost,
         warehouseStocks: v.warehouseStocks,
         createdById: v.createdById,
         updatedById: v.updatedById,
@@ -444,6 +453,7 @@ export class InventoryService {
               create: {
                 warehouseId: input.warehouseId,
                 stock: v.stock,
+                priceCost: v.priceCost,
               },
             },
           },
@@ -606,7 +616,7 @@ export class InventoryService {
               await tx.productVariantStock.upsert({
                 where: { variantId_warehouseId: { variantId: v.id, warehouseId: input.warehouseId } },
                 update: { stock: v.stock },
-                create: { variantId: v.id, warehouseId: input.warehouseId, stock: v.stock }
+                create: { variantId: v.id, warehouseId: input.warehouseId, stock: v.stock, priceCost: v.priceCost }
               });
             }
           } else {
@@ -620,7 +630,7 @@ export class InventoryService {
                 priceCost: v.priceCost,
                 createdById: userId,
                 warehouseStocks: input.warehouseId && v.stock !== undefined ? {
-                  create: { warehouseId: input.warehouseId, stock: v.stock }
+                  create: { warehouseId: input.warehouseId, stock: v.stock, priceCost: v.priceCost }
                 } : undefined
               },
             });
@@ -677,7 +687,7 @@ export class InventoryService {
 
     const variantStockRecord = targetVariant.warehouseStocks[0];
     const oldVariantStock = variantStockRecord ? variantStockRecord.stock : 0;
-    const oldVariantPriceCost = targetVariant.priceCost;
+    const oldVariantPriceCost = variantStockRecord ? variantStockRecord.priceCost : targetVariant.priceCost;
 
     const newVariantStock = oldVariantStock + addedStock;
     const newVariantPriceCost =
@@ -693,15 +703,14 @@ export class InventoryService {
       await tx.productVariant.update({
         where: { id: targetVariant.id },
         data: {
-          priceCost: newVariantPriceCost,
           updatedById: userId,
         },
       });
 
       await tx.productVariantStock.upsert({
         where: { variantId_warehouseId: { variantId: targetVariant.id, warehouseId: input.warehouseId } },
-        update: { stock: newVariantStock },
-        create: { variantId: targetVariant.id, warehouseId: input.warehouseId, stock: newVariantStock }
+        update: { stock: newVariantStock, priceCost: newVariantPriceCost },
+        create: { variantId: targetVariant.id, warehouseId: input.warehouseId, stock: newVariantStock, priceCost: newVariantPriceCost }
       });
     });
 
@@ -755,6 +764,7 @@ export class InventoryService {
 
   async resetVariantCost(
     variantId: string,
+    warehouseId: string,
     newCost: number,
     userId: string
   ): Promise<{ success: boolean; newCost: number }> {
@@ -762,19 +772,22 @@ export class InventoryService {
       throw new Error("Harga modal harus berupa angka yang valid dan tidak boleh negatif");
     }
 
-    const variant = await this.db.productVariant.findUnique({
-      where: { id: variantId },
-    });
-
-    if (!variant) {
-      throw new Error("Varian produk tidak ditemukan");
+    if (!warehouseId) {
+      throw new Error("Gudang wajib dipilih untuk mereset HPP");
     }
 
-    await this.db.productVariant.update({
-      where: { id: variantId },
+    const stockRecord = await this.db.productVariantStock.findUnique({
+      where: { variantId_warehouseId: { variantId, warehouseId } },
+    });
+
+    if (!stockRecord) {
+      throw new Error("Data stok untuk varian dan gudang ini tidak ditemukan");
+    }
+
+    await this.db.productVariantStock.update({
+      where: { id: stockRecord.id },
       data: {
         priceCost: newCost,
-        updatedById: userId,
       },
     });
 
