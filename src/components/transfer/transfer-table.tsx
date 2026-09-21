@@ -68,6 +68,7 @@ import { TransferFormDialog } from "@/components/transfer/transfer-form-dialog";
 import { TransferDeleteDialog } from "@/components/transfer/transfer-delete-dialog";
 import { TransferApproveDialog } from "@/components/transfer/transfer-approve-dialog";
 import { TransferRejectDialog } from "@/components/transfer/transfer-reject-dialog";
+import { useSession } from "next-auth/react";
 
 const pageSizeItems = [
   { label: "5", value: "5" },
@@ -81,12 +82,9 @@ export function TransferTable() {
   const [warehouses, setWarehouses] = React.useState<
     { id: string; name: string; code?: string | null }[]
   >([]);
-  const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(
-    null
-  );
-  const [userWarehouseId, setUserWarehouseId] = React.useState<string | null>(
-    null
-  );
+  const { data: session } = useSession();
+  const currentUserRole = session?.user?.role || null;
+  const userWarehouseId = session?.user?.warehouseId || null;
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -131,27 +129,12 @@ export function TransferTable() {
   const [selectedTransferForReject, setSelectedTransferForReject] =
     React.useState<StockTransferData | null>(null);
 
-  // Fetch Current User Session
+  // Set initial warehouse filter
   React.useEffect(() => {
-    async function fetchSession() {
-      try {
-        const res = await fetch("/api/auth/session");
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.user) {
-            setCurrentUserRole(data.user.role || null);
-            setUserWarehouseId(data.user.warehouseId || null);
-            if (data.user.role === "WAREHOUSE_ADMIN" && data.user.warehouseId) {
-              setSelectedWarehouseFilter(data.user.warehouseId);
-            }
-          }
-        }
-      } catch {
-        // Fallback or ignore
-      }
+    if (currentUserRole === "WAREHOUSE_ADMIN" && userWarehouseId && selectedWarehouseFilter === "ALL") {
+      setSelectedWarehouseFilter(userWarehouseId);
     }
-    fetchSession();
-  }, []);
+  }, [currentUserRole, userWarehouseId, selectedWarehouseFilter]);
 
   // Fetch Warehouses
   const fetchWarehouses = React.useCallback(async () => {
