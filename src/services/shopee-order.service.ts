@@ -165,9 +165,19 @@ export class ShopeeOrderService {
 
     // Calculate item rows
     const fullItemRows: ShopeeOrderItemRow[] = rawItems.map((item, index) => {
-      const hppPerUnit = hppMap.get(item.sku.toLowerCase()) ?? 0;
+      const statusUpper = item.orderStatus.toUpperCase();
+      const isCompleted = statusUpper === "COMPLETED";
+      const isCancelled = statusUpper === "CANCELLED" || statusUpper === "IN_CANCEL" || statusUpper === "CANCELED";
+
+      let hppPerUnit = hppMap.get(item.sku.toLowerCase()) ?? 0;
+      
+      // Jika pesanan batal, HPP / Unit di-set jadi 0
+      if (isCancelled) {
+        hppPerUnit = 0;
+      }
+      
       const hppTotal = hppPerUnit * item.quantity;
-      const isCompleted = item.orderStatus.toUpperCase() === "COMPLETED";
+      
       // Pendapatan Kotor (Diambil dari penghasilan akhir pada detail pesanan, jika status pesanan tidak sama dengan "Selesai", maka 0)
       const pendapatanKotor = isCompleted ? item.grossIncome : 0;
       const pendapatanSebelumBiayaLainnya = pendapatanKotor - hppTotal;
@@ -175,6 +185,7 @@ export class ShopeeOrderService {
       const dateObj = new Date(item.createTime * 1000);
       const tanggalPesananDibuat = !isNaN(dateObj.getTime())
         ? dateObj.toLocaleString("id-ID", {
+            timeZone: "Asia/Jakarta",
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -309,16 +320,16 @@ export class ShopeeOrderService {
       const year = parseInt(yearStr, 10);
       const monthIdx = parseInt(monthStr, 10) - 1; // 0-based
 
-      const startOfMonth = new Date(year, monthIdx, 1, 0, 0, 0);
-      // Last day of month
-      const endOfMonth = new Date(year, monthIdx + 1, 0, 23, 59, 59);
+      // Ensure boundaries are in Asia/Jakarta (+07:00) instead of server local time
+      const startOfMonthStr = `${year}-${String(monthIdx + 1).padStart(2, "0")}-01T00:00:00+07:00`;
+      const startSec = Math.floor(new Date(startOfMonthStr).getTime() / 1000);
 
-      const now = new Date();
-      const actualEnd = endOfMonth > now ? now : endOfMonth;
+      const lastDay = new Date(year, monthIdx + 1, 0).getDate();
+      const endOfMonthStr = `${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}T23:59:59+07:00`;
+      const endOfMonthSec = Math.floor(new Date(endOfMonthStr).getTime() / 1000);
 
-      const startSec = Math.floor(startOfMonth.getTime() / 1000);
-      const finalTimeTo = Math.floor(actualEnd.getTime() / 1000);
-      const endOfMonthSec = Math.floor(endOfMonth.getTime() / 1000);
+      const nowSec = Math.floor(Date.now() / 1000);
+      const finalTimeTo = endOfMonthSec > nowSec ? nowSec : endOfMonthSec;
 
       // If startSec is in the future
       if (startSec > finalTimeTo) {
