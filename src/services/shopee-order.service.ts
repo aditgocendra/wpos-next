@@ -400,10 +400,32 @@ export class ShopeeOrderService {
       for (let i = 0; i < allOrderSns.length; i += BATCH_SIZE) {
         const batch = allOrderSns.slice(i, i + BATCH_SIZE);
         try {
+          // Fetch order details
           const detailRes = await shopeeClient.order.getOrderDetail({
             order_sn_list: [batch.join(",")],
             response_optional_fields: "item_list,buyer_cancel_reason,cancel_reason,total_amount",
           });
+
+          // Fetch escrow details to get accurate final income (penghasilan akhir)
+          const escrowMap = new Map<string, number>();
+          try {
+            // Some SDK versions expect array of joined strings, some expect array of strings. 
+            // We use [batch.join(",")] as it's known to work above, but also pass batch if that fails.
+            const escrowRes = await shopeeClient.payment.getEscrowDetailBatch({
+              order_sn_list: [batch.join(",")],
+            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const escrowList = (escrowRes as any)?.response || [];
+            
+            for (const item of escrowList) {
+              const detail = item.escrow_detail;
+              if (detail && detail.order_sn && detail.order_income?.escrow_amount !== undefined) {
+                escrowMap.set(detail.order_sn, Number(detail.order_income.escrow_amount));
+              }
+            }
+          } catch (escrowErr) {
+            console.warn(`[ShopeeOrderService] getEscrowDetailBatch error for batch:`, escrowErr);
+          }
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const resData = (detailRes as any)?.response || detailRes;
@@ -422,6 +444,8 @@ export class ShopeeOrderService {
 
             const cancelReason = ord.cancel_reason || ord.buyer_cancel_reason || "";
             const totalAmount = Number(ord.total_amount) || 0;
+            const escrowAmount = escrowMap.get(orderSn);
+            const baseAmount = escrowAmount !== undefined ? escrowAmount : totalAmount;
 
             const items = Array.isArray(ord.item_list) ? ord.item_list : [];
 
@@ -434,7 +458,7 @@ export class ShopeeOrderService {
                 productName: "Produk Shopee",
                 sku: "-",
                 quantity: 1,
-                grossIncome: totalAmount,
+                grossIncome: baseAmount,
               });
             } else {
               // Calculate total item price sum to prorate escrow/total amount if multi-item
@@ -449,13 +473,13 @@ export class ShopeeOrderService {
                 const itemPrice = Number(it.model_discounted_price || it.model_original_price) || 0;
                 const itemTotal = itemPrice * qty;
 
-                // Prorate totalAmount or use itemTotal
+                // Prorate baseAmount or use itemTotal
                 const proratedGrossIncome =
-                  totalItemsSum > 0 && totalAmount > 0
-                    ? (itemTotal / totalItemsSum) * totalAmount
+                  totalItemsSum > 0 && baseAmount > 0
+                    ? (itemTotal / totalItemsSum) * baseAmount
                     : itemTotal > 0
                     ? itemTotal
-                    : totalAmount / items.length;
+                    : baseAmount / items.length;
 
                 detailedOrders.push({
                   orderSn,
