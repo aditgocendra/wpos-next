@@ -167,7 +167,8 @@ export class ShopeeOrderService {
     const fullItemRows: ShopeeOrderItemRow[] = rawItems.map((item, index) => {
       const statusUpper = item.orderStatus.toUpperCase();
       const isCompleted = statusUpper === "COMPLETED";
-      const isCancelled = statusUpper === "CANCELLED" || statusUpper === "IN_CANCEL" || statusUpper === "CANCELED";
+      const hasCancelReason = item.cancelReason && item.cancelReason !== "-";
+      const isCancelled = statusUpper === "CANCELLED" || statusUpper === "IN_CANCEL" || statusUpper === "CANCELED" || hasCancelReason;
 
       let hppPerUnit = hppMap.get(item.sku.toLowerCase()) ?? 0;
       
@@ -409,10 +410,9 @@ export class ShopeeOrderService {
           // Fetch escrow details to get accurate final income (penghasilan akhir)
           const escrowMap = new Map<string, number>();
           try {
-            // Some SDK versions expect array of joined strings, some expect array of strings. 
-            // We use [batch.join(",")] as it's known to work above, but also pass batch if that fails.
+            // Use batch directly as it requires an array of order_sn strings
             const escrowRes = await shopeeClient.payment.getEscrowDetailBatch({
-              order_sn_list: [batch.join(",")],
+              order_sn_list: batch,
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const escrowList = (escrowRes as any)?.response || [];
@@ -445,7 +445,13 @@ export class ShopeeOrderService {
             const cancelReason = ord.cancel_reason || ord.buyer_cancel_reason || "";
             const totalAmount = Number(ord.total_amount) || 0;
             const escrowAmount = escrowMap.get(orderSn);
-            const baseAmount = escrowAmount !== undefined ? escrowAmount : totalAmount;
+            let baseAmount = escrowAmount !== undefined ? escrowAmount : totalAmount;
+
+            const statusUpper = orderStatus.toUpperCase();
+            const isCancelled = statusUpper === "CANCELLED" || statusUpper === "IN_CANCEL" || statusUpper === "CANCELED" || (cancelReason && cancelReason !== "-");
+            if (isCancelled) {
+              baseAmount = 0;
+            }
 
             const items = Array.isArray(ord.item_list) ? ord.item_list : [];
 
