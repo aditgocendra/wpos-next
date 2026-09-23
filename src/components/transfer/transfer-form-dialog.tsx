@@ -21,6 +21,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
   ArrowRightLeftIcon,
   WarehouseIcon,
   PlusIcon,
@@ -28,7 +41,10 @@ import {
   Loader2Icon,
   PackageIcon,
   AlertCircleIcon,
+  CheckIcon,
+  ChevronsUpDownIcon,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 import type { StockTransferData } from "@/services/transfer.service";
 import type { ProductItem } from "@/services/inventory.service";
@@ -54,6 +70,69 @@ interface TransferFormDialogProps {
   onSuccess: () => void;
   userRole?: string | null;
   userWarehouseId?: string | null;
+}
+
+function ProductCombobox({
+  selectableProducts,
+  value,
+  onChange,
+}: {
+  selectableProducts: any[];
+  value: string;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full h-9 text-xs justify-between font-normal px-3"
+          >
+            {value
+              ? selectableProducts.find((p) => p.id === value)?.name || "Pilih Produk"
+              : "Pilih Produk"}
+            <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        }
+      />
+      <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Cari produk berdasarkan nama..." className="text-xs" />
+          <CommandList>
+            <CommandEmpty className="text-xs py-4 text-center text-muted-foreground">
+              Produk tidak ditemukan.
+            </CommandEmpty>
+            <CommandGroup>
+              {selectableProducts.map((p) => (
+                <CommandItem
+                  key={p.id}
+                  value={p.name}
+                  onSelect={() => {
+                    onChange(p.id);
+                    setOpen(false);
+                  }}
+                  className="text-xs py-2 cursor-pointer"
+                >
+                  <CheckIcon
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === p.id ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <div className="truncate">{p.name}</div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function TransferFormDialog({
@@ -497,27 +576,11 @@ export function TransferFormDialog({
                           <Label className="text-xs">
                             Produk <span className="text-destructive">*</span>
                           </Label>
-                          <Select
+                          <ProductCombobox
+                            selectableProducts={selectableProducts}
                             value={row.productId}
-                            onValueChange={(val) => {
-                              if (val) handleProductChange(index, val);
-                            }}
-                          >
-                            <SelectTrigger className="w-full h-9 text-xs">
-                              <SelectValue placeholder="Pilih Produk" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {selectableProducts.map((p) => (
-                                <SelectItem
-                                  key={p.id}
-                                  value={p.id}
-                                  className="text-xs"
-                                >
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={(val) => handleProductChange(index, val)}
+                          />
                         </div>
 
                         <div className="md:col-span-5 space-y-1.5">
