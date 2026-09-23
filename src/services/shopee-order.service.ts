@@ -5,6 +5,7 @@ export interface ShopeeOrderItemRow {
   id: string; // Unique row ID (orderSn + sku / index)
   noPesanan: string;
   tanggalPesananDibuat: string;
+  createTime: number;
   statusPesanan: string;
   alasanPembatalan: string;
   namaProduk: string;
@@ -200,6 +201,7 @@ export class ShopeeOrderService {
         id: `${item.orderSn}-${index}`,
         noPesanan: item.orderSn,
         tanggalPesananDibuat,
+        createTime: item.createTime,
         statusPesanan: item.orderStatus,
         alasanPembatalan: item.cancelReason || "-",
         namaProduk: item.productName || "Produk Shopee",
@@ -415,7 +417,8 @@ export class ShopeeOrderService {
               order_sn_list: batch,
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const escrowList = (escrowRes as any)?.response || [];
+            const responseObj = (escrowRes as any)?.response || {};
+            const escrowList = responseObj.escrow_list || (Array.isArray(responseObj) ? responseObj : []);
             
             for (const item of escrowList) {
               const detail = item.escrow_detail;

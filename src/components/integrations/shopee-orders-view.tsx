@@ -134,7 +134,7 @@ export function ShopeeOrdersView() {
   const [limit, setLimit] = useState<number>(10);
 
   // Data & Summary State
-  const [items, setItems] = useState<ShopeeOrderItemRow[]>([]);
+  const [allItems, setAllItems] = useState<ShopeeOrderItemRow[]>([]);
   const [summary, setSummary] = useState<ShopeeOrderSummary>({
     totalPendapatanKotor: 0,
     totalHpp: 0,
@@ -150,12 +150,45 @@ export function ShopeeOrdersView() {
       unexpectedCost: 0,
     },
   });
-  const [paginationMeta, setPaginationMeta] = useState({
-    total: 0,
-    page: 1,
-    limit: 10,
-    totalPages: 1,
-  });
+
+  const filteredAndSortedItems = useMemo(() => {
+    let result = [...allItems];
+    // Filter
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(
+        (it) =>
+          it.noPesanan.toLowerCase().includes(q) ||
+          it.nomorReferensiSku.toLowerCase().includes(q) ||
+          it.namaProduk.toLowerCase().includes(q)
+      );
+    }
+    // Sort
+    result.sort((a, b) => {
+      if (sortBy === "orderStatus") {
+        return sortOrder === "asc"
+          ? a.statusPesanan.localeCompare(b.statusPesanan)
+          : b.statusPesanan.localeCompare(a.statusPesanan);
+      } else {
+        return sortOrder === "asc"
+          ? (a.createTime || 0) - (b.createTime || 0)
+          : (b.createTime || 0) - (a.createTime || 0);
+      }
+    });
+    return result;
+  }, [allItems, debouncedSearch, sortBy, sortOrder]);
+
+  const items = useMemo(() => {
+    const start = (page - 1) * limit;
+    return filteredAndSortedItems.slice(start, start + limit);
+  }, [filteredAndSortedItems, page, limit]);
+
+  const paginationMeta = useMemo(() => ({
+    total: filteredAndSortedItems.length,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(filteredAndSortedItems.length / limit)),
+  }), [filteredAndSortedItems.length, page, limit]);
 
   // UI Control States
   const [hasFetched, setHasFetched] = useState<boolean>(false);
@@ -211,15 +244,8 @@ export function ShopeeOrdersView() {
         const params = new URLSearchParams({
           integrationId: selectedIntegrationId,
           month: month || currentMonthStr,
-          page: page.toString(),
-          limit: limit.toString(),
-          sortBy,
-          sortOrder,
+          limit: "999999", // Fetch all items for client-side pagination
         });
-
-        if (debouncedSearch) {
-          params.set("search", debouncedSearch);
-        }
 
         if (forceRefresh) {
           params.set("refresh", "true");
@@ -232,15 +258,12 @@ export function ShopeeOrdersView() {
           throw new Error(data.error || "Gagal menarik data pesanan.");
         }
 
-        setItems(data.items || []);
+        setAllItems(data.items || []);
         if (data.summary) {
           setSummary(data.summary);
           setAdCostInput(data.summary.biayaLainnya?.adCost?.toString() || "0");
           setOperationalCostInput(data.summary.biayaLainnya?.operationalCost?.toString() || "0");
           setUnexpectedCostInput(data.summary.biayaLainnya?.unexpectedCost?.toString() || "0");
-        }
-        if (data.pagination) {
-          setPaginationMeta(data.pagination);
         }
 
         if (forceRefresh) {
@@ -252,7 +275,7 @@ export function ShopeeOrdersView() {
         setLoading(false);
       }
     },
-    [selectedIntegrationId, month, currentMonthStr, page, limit, sortBy, sortOrder, debouncedSearch]
+    [selectedIntegrationId, month, currentMonthStr]
   );
 
   useEffect(() => {
@@ -276,7 +299,7 @@ export function ShopeeOrdersView() {
     setSearch("");
     setPage(1);
     setHasFetched(false);
-    setItems([]);
+    setAllItems([]);
     toast.info(`Filter bulan direset ke bulan saat ini (${currentMonthStr})`);
   };
 
@@ -364,13 +387,6 @@ export function ShopeeOrdersView() {
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      // Ambil seluruh item untuk export (tanpa limit halaman kecil)
-      const res = await fetch(
-        `/api/shopee/orders?integrationId=${selectedIntegrationId}&month=${month}&limit=500`
-      );
-      const data = await res.json();
-      const allItems = data.items || items;
-
       exportShopeeOrdersToExcel({
         shopName: currentShopName,
         month,
@@ -389,12 +405,6 @@ export function ShopeeOrdersView() {
   const handleExportPdf = async () => {
     setExporting(true);
     try {
-      const res = await fetch(
-        `/api/shopee/orders?integrationId=${selectedIntegrationId}&month=${month}&limit=500`
-      );
-      const data = await res.json();
-      const allItems = data.items || items;
-
       exportShopeeOrdersToPdf({
         shopName: currentShopName,
         month,
@@ -508,7 +518,7 @@ export function ShopeeOrdersView() {
                 onValueChange={(val) => {
                   setSelectedIntegrationId(val || "");
                   setHasFetched(false);
-                  setItems([]);
+                  setAllItems([]);
                   setPage(1);
                 }}
               >
@@ -542,7 +552,7 @@ export function ShopeeOrdersView() {
                 onChange={(val) => {
                   setMonth(val);
                   setHasFetched(false);
-                  setItems([]);
+                  setAllItems([]);
                   setPage(1);
                 }}
               />
