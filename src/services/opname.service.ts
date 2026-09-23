@@ -267,6 +267,9 @@ export class OpnameService {
       }
 
       return createdOpname;
+    }, {
+      maxWait: 5000, // 5 seconds
+      timeout: 30000, // 30 seconds
     });
 
     // 3. Push physical stock updates to connected Shopee stores asynchronously
@@ -388,6 +391,9 @@ export class OpnameService {
       });
 
       return updated;
+    }, {
+      maxWait: 5000, // 5 seconds
+      timeout: 30000, // 30 seconds
     });
 
     // 4. Push physical stock updates to connected Shopee stores if status becomes COMPLETED
