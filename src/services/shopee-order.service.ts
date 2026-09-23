@@ -422,8 +422,11 @@ export class ShopeeOrderService {
             
             for (const item of escrowList) {
               const detail = item.escrow_detail;
-              if (detail && detail.order_sn && detail.order_income?.escrow_amount !== undefined) {
-                escrowMap.set(detail.order_sn, Number(detail.order_income.escrow_amount));
+              if (detail && detail.order_sn) {
+                const finalAmount = detail.order_income?.escrow_amount_after_adjustment ?? detail.order_income?.escrow_amount;
+                if (finalAmount !== undefined) {
+                  escrowMap.set(detail.order_sn, Number(finalAmount));
+                }
               }
             }
           } catch (escrowErr) {
@@ -448,9 +451,17 @@ export class ShopeeOrderService {
             const cancelReason = ord.cancel_reason || ord.buyer_cancel_reason || "";
             const totalAmount = Number(ord.total_amount) || 0;
             const escrowAmount = escrowMap.get(orderSn);
-            let baseAmount = escrowAmount !== undefined ? escrowAmount : totalAmount;
-
             const statusUpper = orderStatus.toUpperCase();
+
+            let baseAmount = totalAmount;
+
+            if (escrowAmount !== undefined) {
+              baseAmount = escrowAmount;
+            } else if (statusUpper === "COMPLETED") {
+              // Jika pesanan selesai tapi escrow tidak ada, kemungkinan besar di-return 100%
+              baseAmount = 0;
+            }
+
             const isCancelled = statusUpper === "CANCELLED" || statusUpper === "IN_CANCEL" || statusUpper === "CANCELED" || (cancelReason && cancelReason !== "-");
             if (isCancelled) {
               baseAmount = 0;
@@ -482,12 +493,10 @@ export class ShopeeOrderService {
                 const itemPrice = Number(it.model_discounted_price || it.model_original_price) || 0;
                 const itemTotal = itemPrice * qty;
 
-                // Prorate baseAmount or use itemTotal
+                // Prorate baseAmount across items
                 const proratedGrossIncome =
-                  totalItemsSum > 0 && baseAmount > 0
+                  totalItemsSum > 0
                     ? (itemTotal / totalItemsSum) * baseAmount
-                    : itemTotal > 0
-                    ? itemTotal
                     : baseAmount / items.length;
 
                 detailedOrders.push({
