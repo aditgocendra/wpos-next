@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
-import type { StockOpnameStatus, Role } from "@/generated/prisma/client";
+import { Prisma, type StockOpnameStatus, type Role } from "@/generated/prisma/client";
+import { randomUUID } from "crypto";
 import {
   shopeeSyncService as defaultShopeeSyncService,
   ShopeeSyncService,
@@ -245,31 +246,19 @@ export class OpnameService {
       });
 
       // 2. If status is COMPLETED, apply physical stock to ProductVariantStock table immediately
-      if (targetStatus === "COMPLETED") {
-        const chunkSize = 50;
-        for (let i = 0; i < input.items.length; i += chunkSize) {
-          const chunk = input.items.slice(i, i + chunkSize);
-          await Promise.all(
-            chunk.map((item) =>
-              tx.productVariantStock.upsert({
-                where: {
-                  variantId_warehouseId: {
-                    variantId: item.variantId,
-                    warehouseId: input.warehouseId,
-                  },
-                },
-                create: {
-                  variantId: item.variantId,
-                  warehouseId: input.warehouseId,
-                  stock: Number(item.actualStock) || 0,
-                },
-                update: {
-                  stock: Number(item.actualStock) || 0,
-                },
-              })
-            )
-          );
-        }
+      if (targetStatus === "COMPLETED" && input.items.length > 0) {
+        const values = input.items.map(
+          (item) =>
+            Prisma.sql`(${randomUUID()}, ${item.variantId}, ${input.warehouseId}, ${
+              Number(item.actualStock) || 0
+            })`
+        );
+        await tx.$executeRaw`
+          INSERT INTO product_variant_stocks ("id", "variantId", "warehouseId", "stock")
+          VALUES ${Prisma.join(values)}
+          ON CONFLICT ("variantId", "warehouseId") 
+          DO UPDATE SET "stock" = EXCLUDED."stock"
+        `;
       }
 
       return createdOpname;
@@ -356,29 +345,19 @@ export class OpnameService {
           ? input.items
           : existing.items;
 
-        const chunkSize = 50;
-        for (let i = 0; i < finalItems.length; i += chunkSize) {
-          const chunk = finalItems.slice(i, i + chunkSize);
-          await Promise.all(
-            chunk.map((item) =>
-              tx.productVariantStock.upsert({
-                where: {
-                  variantId_warehouseId: {
-                    variantId: item.variantId,
-                    warehouseId: existing.warehouseId,
-                  },
-                },
-                create: {
-                  variantId: item.variantId,
-                  warehouseId: existing.warehouseId,
-                  stock: Number(item.actualStock) || 0,
-                },
-                update: {
-                  stock: Number(item.actualStock) || 0,
-                },
-              })
-            )
+        if (finalItems.length > 0) {
+          const values = finalItems.map(
+            (item) =>
+              Prisma.sql`(${randomUUID()}, ${item.variantId}, ${existing.warehouseId}, ${
+                Number(item.actualStock) || 0
+              })`
           );
+          await tx.$executeRaw`
+            INSERT INTO product_variant_stocks ("id", "variantId", "warehouseId", "stock")
+            VALUES ${Prisma.join(values)}
+            ON CONFLICT ("variantId", "warehouseId") 
+            DO UPDATE SET "stock" = EXCLUDED."stock"
+          `;
         }
       }
 
