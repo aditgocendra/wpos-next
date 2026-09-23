@@ -218,8 +218,10 @@ export class InventoryService {
         productTotalStock += variantStock;
         totalCostSum += relevantStocks.reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0);
 
-        const avgVariantCost = relevantStocks.length > 0 
-          ? relevantStocks.reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / (variantStock || 1)
+        const avgVariantCost = relevantStocks.length > 0
+          ? variantStock > 0
+            ? relevantStocks.reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / variantStock
+            : relevantStocks.reduce((sum, s) => sum + (s.priceCost ?? v.priceCost), 0) / relevantStocks.length
           : v.priceCost;
 
         return {
@@ -230,7 +232,7 @@ export class InventoryService {
           image: v.image || null,
           stock: variantStock,
           priceSell: v.priceSell,
-          priceCost: variantStock > 0 ? avgVariantCost : v.priceCost,
+          priceCost: avgVariantCost,
           warehouseStocks: v.warehouseStocks,
           createdById: v.createdById,
           updatedById: v.updatedById,
@@ -239,7 +241,9 @@ export class InventoryService {
         };
       });
 
-      const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+      const avgCostPrice = productTotalStock > 0 
+        ? (totalCostSum / productTotalStock) 
+        : (mappedVariants.length > 0 ? mappedVariants.reduce((sum, v) => sum + v.priceCost, 0) / mappedVariants.length : 0);
       const primaryImage = mappedVariants[0]?.image || null;
 
       return {
@@ -311,7 +315,9 @@ export class InventoryService {
       totalCostSum += (v.warehouseStocks || []).reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0);
 
       const avgVariantCost = (v.warehouseStocks || []).length > 0
-        ? (v.warehouseStocks || []).reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / (variantStock || 1)
+        ? variantStock > 0
+          ? (v.warehouseStocks || []).reduce((sum, s) => sum + (s.stock * (s.priceCost ?? v.priceCost)), 0) / variantStock
+          : (v.warehouseStocks || []).reduce((sum, s) => sum + (s.priceCost ?? v.priceCost), 0) / (v.warehouseStocks || []).length
         : v.priceCost;
 
       return {
@@ -322,7 +328,7 @@ export class InventoryService {
         image: v.image || null,
         stock: variantStock,
         priceSell: v.priceSell,
-        priceCost: variantStock > 0 ? avgVariantCost : v.priceCost,
+        priceCost: avgVariantCost,
         warehouseStocks: v.warehouseStocks,
         createdById: v.createdById,
         updatedById: v.updatedById,
@@ -331,7 +337,9 @@ export class InventoryService {
       };
     });
 
-    const avgCostPrice = productTotalStock > 0 ? (totalCostSum / productTotalStock) : 0;
+    const avgCostPrice = productTotalStock > 0 
+      ? (totalCostSum / productTotalStock) 
+      : (mappedVariants.length > 0 ? mappedVariants.reduce((sum, v) => sum + v.priceCost, 0) / mappedVariants.length : 0);
     const primaryImage = mappedVariants[0]?.image || null;
 
     return {
