@@ -213,7 +213,7 @@ export class OpnameService {
     const targetStatus: StockOpnameStatus = input.status || "DRAFT";
 
     const createdOpname = await this.db.$transaction(async (tx) => {
-      // 1. Create Stock Opname
+      // 1. Create Stock Opname header
       const createdOpname = await tx.stockOpname.create({
         data: {
           opnameNumber,
@@ -221,29 +221,37 @@ export class OpnameService {
           status: targetStatus,
           notes: input.notes?.trim() || null,
           createdById: user.id,
-          items: {
-            create: input.items.map((item) => {
-              const systemStock = Number(item.systemStock) || 0;
-              const actualStock = Number(item.actualStock) || 0;
-              const difference = actualStock - systemStock;
-
-              return {
-                productId: item.productId,
-                variantId: item.variantId,
-                systemStock,
-                actualStock,
-                difference,
-                notes: item.notes?.trim() || null,
-              };
-            }),
-          },
         },
         include: {
-          items: true,
           warehouse: true,
           createdBy: { select: { id: true, name: true, email: true } },
         },
       });
+
+      // 1b. Create Stock Opname Items in bulk
+      await tx.stockOpnameItem.createMany({
+        data: input.items.map((item) => {
+          const systemStock = Number(item.systemStock) || 0;
+          const actualStock = Number(item.actualStock) || 0;
+          const difference = actualStock - systemStock;
+
+          return {
+            opnameId: createdOpname.id,
+            productId: item.productId,
+            variantId: item.variantId,
+            systemStock,
+            actualStock,
+            difference,
+            notes: item.notes?.trim() || null,
+          };
+        }),
+      });
+
+      // Attach items to createdOpname for return consistency
+      const createdItems = await tx.stockOpnameItem.findMany({
+        where: { opnameId: createdOpname.id },
+      });
+      (createdOpname as any).items = createdItems;
 
       // 2. If status is COMPLETED, apply physical stock to ProductVariantStock table immediately
       if (targetStatus === "COMPLETED" && input.items.length > 0) {
