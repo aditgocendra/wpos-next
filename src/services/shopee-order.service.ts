@@ -423,7 +423,20 @@ export class ShopeeOrderService {
             for (const item of escrowList) {
               const detail = item.escrow_detail;
               if (detail && detail.order_sn) {
-                const finalAmount = detail.order_income?.escrow_amount_after_adjustment ?? detail.order_income?.escrow_amount;
+                let finalAmount = detail.order_income?.escrow_amount_after_adjustment;
+
+                // Fallback jika API tidak memberikan escrow_amount_after_adjustment langsung
+                if (finalAmount === undefined && detail.order_income?.escrow_amount !== undefined) {
+                  let totalAdj = detail.order_income.total_adjustment_amount || 0;
+                  
+                  // Jika total_adjustment_amount kosong tapi ada rincian order_adjustment, jumlahkan manual
+                  if (totalAdj === 0 && Array.isArray(detail.order_income.order_adjustment)) {
+                    totalAdj = detail.order_income.order_adjustment.reduce((sum: number, adj: any) => sum + (Number(adj.amount) || 0), 0);
+                  }
+                  
+                  finalAmount = detail.order_income.escrow_amount + totalAdj;
+                }
+
                 if (finalAmount !== undefined) {
                   escrowMap.set(detail.order_sn, Number(finalAmount));
                 }
