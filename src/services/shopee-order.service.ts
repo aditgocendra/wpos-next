@@ -412,38 +412,43 @@ export class ShopeeOrderService {
           // Fetch escrow details to get accurate final income (penghasilan akhir)
           const escrowMap = new Map<string, number>();
           try {
-            // Use batch directly as it requires an array of order_sn strings
-            const escrowRes = await shopeeClient.payment.getEscrowDetailBatch({
-              order_sn_list: batch,
-            });
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const responseObj = (escrowRes as any)?.response || {};
-            const escrowList = responseObj.escrow_list || (Array.isArray(responseObj) ? responseObj : []);
-            
-            for (const item of escrowList) {
-              const detail = item.escrow_detail;
-              if (detail && detail.order_sn) {
-                let finalAmount = detail.order_income?.escrow_amount_after_adjustment;
+            // Shopee's batch API tidak mengembalikan rincian kompensasi/adjustment secara lengkap.
+            // Kita harus menggunakan API satuan (getEscrowDetail) untuk mendapatkan escrow_amount_after_adjustment.
+            const chunkSize = 10;
+            for (let i = 0; i < batch.length; i += chunkSize) {
+              const chunk = batch.slice(i, i + chunkSize);
+              await Promise.all(
+                chunk.map(async (order_sn) => {
+                  try {
+                    const escrowRes = await shopeeClient.payment.getEscrowDetail({ order_sn });
+                    const detail = (escrowRes as any)?.response;
+                    if (!detail) return;
 
-                // Fallback jika API tidak memberikan escrow_amount_after_adjustment langsung
-                if (finalAmount === undefined && detail.order_income?.escrow_amount !== undefined) {
-                  let totalAdj = detail.order_income.total_adjustment_amount || 0;
-                  
-                  // Jika total_adjustment_amount kosong tapi ada rincian order_adjustment, jumlahkan manual
-                  if (totalAdj === 0 && Array.isArray(detail.order_income.order_adjustment)) {
-                    totalAdj = detail.order_income.order_adjustment.reduce((sum: number, adj: any) => sum + (Number(adj.amount) || 0), 0);
+                    let finalAmount = detail.order_income?.escrow_amount_after_adjustment;
+
+                    // Fallback jika API tidak memberikan escrow_amount_after_adjustment langsung
+                    if (finalAmount === undefined && detail.order_income?.escrow_amount !== undefined) {
+                      let totalAdj = detail.order_income.total_adjustment_amount || 0;
+                      
+                      // Jika total_adjustment_amount kosong tapi ada rincian order_adjustment, jumlahkan manual
+                      if (totalAdj === 0 && Array.isArray(detail.order_income.order_adjustment)) {
+                        totalAdj = detail.order_income.order_adjustment.reduce((sum: number, adj: any) => sum + (Number(adj.amount) || 0), 0);
+                      }
+                      
+                      finalAmount = detail.order_income.escrow_amount + totalAdj;
+                    }
+
+                    if (finalAmount !== undefined) {
+                      escrowMap.set(order_sn, Number(finalAmount));
+                    }
+                  } catch (err) {
+                    console.warn(`[ShopeeOrderService] Failed to fetch escrow for ${order_sn}:`, err);
                   }
-                  
-                  finalAmount = detail.order_income.escrow_amount + totalAdj;
-                }
-
-                if (finalAmount !== undefined) {
-                  escrowMap.set(detail.order_sn, Number(finalAmount));
-                }
-              }
+                })
+              );
             }
           } catch (escrowErr) {
-            console.warn(`[ShopeeOrderService] getEscrowDetailBatch error for batch:`, escrowErr);
+            console.warn(`[ShopeeOrderService] Escrow loop error:`, escrowErr);
           }
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
