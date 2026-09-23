@@ -25,6 +25,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ImageZoomDialog } from "@/components/ui/image-zoom-dialog";
 import {
   Command,
   CommandEmpty,
@@ -76,31 +77,59 @@ function ProductCombobox({
   selectableProducts,
   value,
   onChange,
+  selectedVariantImage,
 }: {
   selectableProducts: any[];
   value: string;
   onChange: (val: string) => void;
+  selectedVariantImage?: string | null;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [zoomImage, setZoomImage] = React.useState<string | null>(null);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            className="w-full h-9 text-xs justify-between font-normal px-3"
-          >
-            {value
-              ? selectableProducts.find((p) => p.id === value)?.name || "Pilih Produk"
-              : "Pilih Produk"}
-            <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        }
-      />
-      <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={open}
+              className="w-full h-9 text-xs justify-between font-normal px-3"
+            >
+              <div className="flex items-center gap-2 truncate text-left">
+                {(() => {
+                  const selected = selectableProducts.find((p) => p.id === value);
+                  if (selected) {
+                    const displayImage = selectedVariantImage || selected.image;
+                    return (
+                      <>
+                        {displayImage && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={displayImage}
+                            alt={selected.name}
+                            className="size-5 object-cover rounded-sm shrink-0 border cursor-pointer hover:opacity-80 transition-opacity"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setZoomImage(displayImage);
+                            }}
+                          />
+                        )}
+                        <span className="truncate">{selected.name}</span>
+                      </>
+                    );
+                  }
+                  return <span>Pilih Produk</span>;
+                })()}
+              </div>
+              <ChevronsUpDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          }
+        />
+        <PopoverContent className="w-[300px] sm:w-[400px] p-0" align="start">
         <Command>
           <CommandInput placeholder="Cari produk berdasarkan nama..." className="text-xs" />
           <CommandList>
@@ -116,14 +145,22 @@ function ProductCombobox({
                     onChange(p.id);
                     setOpen(false);
                   }}
-                  className="text-xs py-2 cursor-pointer"
+                  className="text-xs py-2 cursor-pointer flex items-center gap-2"
                 >
                   <CheckIcon
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "h-4 w-4 shrink-0",
                       value === p.id ? "opacity-100" : "opacity-0"
                     )}
                   />
+                  {p.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.image}
+                      alt={p.name}
+                      className="size-6 object-cover rounded-sm shrink-0 border"
+                    />
+                  )}
                   <div className="truncate">{p.name}</div>
                 </CommandItem>
               ))}
@@ -132,6 +169,15 @@ function ProductCombobox({
         </Command>
       </PopoverContent>
     </Popover>
+
+      <ImageZoomDialog
+        src={zoomImage}
+        open={!!zoomImage}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setZoomImage(null);
+        }}
+      />
+    </>
   );
 }
 
@@ -580,6 +626,7 @@ export function TransferFormDialog({
                             selectableProducts={selectableProducts}
                             value={row.productId}
                             onChange={(val) => handleProductChange(index, val)}
+                            selectedVariantImage={selectedVariant?.image}
                           />
                         </div>
 
