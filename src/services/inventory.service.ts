@@ -776,19 +776,17 @@ export class InventoryService {
       throw new Error("Gudang wajib dipilih untuk mereset HPP");
     }
 
-    const stockRecord = await this.db.productVariantStock.findUnique({
-      where: { variantId_warehouseId: { variantId, warehouseId } },
-    });
+    await this.db.$transaction(async (tx) => {
+      await tx.productVariantStock.upsert({
+        where: { variantId_warehouseId: { variantId, warehouseId } },
+        update: { priceCost: newCost },
+        create: { variantId, warehouseId, stock: 0, priceCost: newCost },
+      });
 
-    if (!stockRecord) {
-      throw new Error("Data stok untuk varian dan gudang ini tidak ditemukan");
-    }
-
-    await this.db.productVariantStock.update({
-      where: { id: stockRecord.id },
-      data: {
-        priceCost: newCost,
-      },
+      await tx.productVariant.update({
+        where: { id: variantId },
+        data: { priceCost: newCost, updatedById: userId },
+      });
     });
 
     return { success: true, newCost };
