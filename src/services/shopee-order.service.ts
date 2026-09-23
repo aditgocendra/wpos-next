@@ -493,12 +493,10 @@ export class ShopeeOrderService {
                 const itemPrice = Number(it.model_discounted_price || it.model_original_price) || 0;
                 const itemTotal = itemPrice * qty;
 
-                // Prorate baseAmount or use itemTotal
+                // Prorate baseAmount across items
                 const proratedGrossIncome =
-                  totalItemsSum > 0 && baseAmount > 0
+                  totalItemsSum > 0
                     ? (itemTotal / totalItemsSum) * baseAmount
-                    : itemTotal > 0
-                    ? itemTotal
                     : baseAmount / items.length;
 
                 detailedOrders.push({
