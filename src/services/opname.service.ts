@@ -246,23 +246,29 @@ export class OpnameService {
 
       // 2. If status is COMPLETED, apply physical stock to ProductVariantStock table immediately
       if (targetStatus === "COMPLETED") {
-        for (const item of input.items) {
-          await tx.productVariantStock.upsert({
-            where: {
-              variantId_warehouseId: {
-                variantId: item.variantId,
-                warehouseId: input.warehouseId,
-              },
-            },
-            create: {
-              variantId: item.variantId,
-              warehouseId: input.warehouseId,
-              stock: Number(item.actualStock) || 0,
-            },
-            update: {
-              stock: Number(item.actualStock) || 0,
-            },
-          });
+        const chunkSize = 50;
+        for (let i = 0; i < input.items.length; i += chunkSize) {
+          const chunk = input.items.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map((item) =>
+              tx.productVariantStock.upsert({
+                where: {
+                  variantId_warehouseId: {
+                    variantId: item.variantId,
+                    warehouseId: input.warehouseId,
+                  },
+                },
+                create: {
+                  variantId: item.variantId,
+                  warehouseId: input.warehouseId,
+                  stock: Number(item.actualStock) || 0,
+                },
+                update: {
+                  stock: Number(item.actualStock) || 0,
+                },
+              })
+            )
+          );
         }
       }
 
@@ -350,23 +356,29 @@ export class OpnameService {
           ? input.items
           : existing.items;
 
-        for (const item of finalItems) {
-          await tx.productVariantStock.upsert({
-            where: {
-              variantId_warehouseId: {
-                variantId: item.variantId,
-                warehouseId: existing.warehouseId,
-              },
-            },
-            create: {
-              variantId: item.variantId,
-              warehouseId: existing.warehouseId,
-              stock: Number(item.actualStock) || 0,
-            },
-            update: {
-              stock: Number(item.actualStock) || 0,
-            },
-          });
+        const chunkSize = 50;
+        for (let i = 0; i < finalItems.length; i += chunkSize) {
+          const chunk = finalItems.slice(i, i + chunkSize);
+          await Promise.all(
+            chunk.map((item) =>
+              tx.productVariantStock.upsert({
+                where: {
+                  variantId_warehouseId: {
+                    variantId: item.variantId,
+                    warehouseId: existing.warehouseId,
+                  },
+                },
+                create: {
+                  variantId: item.variantId,
+                  warehouseId: existing.warehouseId,
+                  stock: Number(item.actualStock) || 0,
+                },
+                update: {
+                  stock: Number(item.actualStock) || 0,
+                },
+              })
+            )
+          );
         }
       }
 
