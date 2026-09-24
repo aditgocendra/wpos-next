@@ -331,7 +331,7 @@ export class TransferService {
       });
 
       return this.formatTransfer(updatedTransfer);
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     // 5. Push stock updates to connected Shopee stores for both source and destination warehouses asynchronously
     const syncItems = formattedTransfer.items.map((item) => ({
@@ -520,7 +520,7 @@ export class TransferService {
       });
 
       return this.formatTransfer(updated);
-    });
+    }, { maxWait: 10000, timeout: 30000 });
   }
 
   /**
