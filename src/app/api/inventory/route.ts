@@ -25,6 +25,9 @@ export async function GET(req: Request) {
     const search = searchParams.get("search") || undefined;
     const pageParam = searchParams.get("page");
     const limitParam = searchParams.get("limit");
+    const sortBy = searchParams.get("sortBy") || undefined;
+    const sortOrderParam = searchParams.get("sortOrder");
+    const sortOrder = sortOrderParam === "asc" || sortOrderParam === "desc" ? sortOrderParam : undefined;
 
     const page = pageParam ? parseInt(pageParam, 10) : undefined;
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
@@ -43,6 +46,8 @@ export async function GET(req: Request) {
       search,
       page,
       limit,
+      sortBy,
+      sortOrder,
     });
 
     return NextResponse.json({
