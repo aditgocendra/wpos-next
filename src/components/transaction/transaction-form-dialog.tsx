@@ -38,6 +38,7 @@ import {
   ShoppingCartIcon,
   MinusIcon,
   AlertCircleIcon,
+  PackageIcon,
 } from "lucide-react";
 import type { TransactionData } from "@/services/transaction.service";
 
@@ -54,12 +55,14 @@ interface ProductVariantOption {
   sku: string;
   stock: number;
   priceSell: number;
+  image?: string | null;
 }
 
 interface ProductOption {
   id: string;
   name: string;
   warehouseId: string;
+  image?: string | null;
   variants: ProductVariantOption[];
 }
 
@@ -73,6 +76,7 @@ interface CartItem {
   quantity: number;
   availableStock: number;
   totalPrice: number;
+  image?: string | null;
 }
 
 interface TransactionFormDialogProps {
@@ -113,6 +117,9 @@ export function TransactionFormDialog({
   // Submission State
   const [loading, setLoading] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Enlarged Image State
+  const [enlargedImage, setEnlargedImage] = React.useState<string | null>(null);
 
   // Debounce search input
   React.useEffect(() => {
@@ -282,6 +289,7 @@ export function TransactionFormDialog({
           quantity: addQuantity,
           availableStock: variant.stock,
           totalPrice: addQuantity * variant.priceSell,
+          image: variant.image || selectedProduct.image,
         },
       ];
     });
@@ -368,7 +376,8 @@ export function TransactionFormDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-full max-w-[95vw] sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="border-b pb-4">
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
@@ -482,7 +491,24 @@ export function TransactionFormDialog({
                         }}
                         className="w-full text-left px-4 py-2.5 hover:bg-muted/80 flex items-center justify-between transition-colors text-sm"
                       >
-                        <span className="font-medium text-foreground">{prod.name}</span>
+                        <div className="flex items-center gap-3">
+                          {prod.image ? (
+                            <img
+                              src={prod.image}
+                              alt={prod.name}
+                              className="size-8 h-8 w-8 object-cover rounded-md cursor-zoom-in border border-border bg-background"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEnlargedImage(prod.image || null);
+                              }}
+                            />
+                          ) : (
+                            <div className="size-8 h-8 w-8 rounded-md border flex items-center justify-center bg-muted">
+                              <PackageIcon className="size-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <span className="font-medium text-foreground">{prod.name}</span>
+                        </div>
                         <span className="text-xs text-muted-foreground">
                           {prod.variants.length} Varian
                         </span>
@@ -586,7 +612,9 @@ export function TransactionFormDialog({
             </div>
 
             <div className="rounded-xl border overflow-hidden">
-              <Table>
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 text-xs">
                     <TableHead className="font-semibold">Product Name</TableHead>
@@ -670,6 +698,91 @@ export function TransactionFormDialog({
                   )}
                 </TableBody>
               </Table>
+              </div>
+
+              {/* Mobile View */}
+              <div className="md:hidden divide-y bg-background">
+                {cartItems.length > 0 ? (
+                  cartItems.map((item, index) => (
+                    <div key={`${item.productId}-${item.variantId}`} className="p-3.5 flex gap-3 relative">
+                      {/* Gambar Produk: Kiri */}
+                      <div className="size-16 shrink-0 rounded-md bg-muted/50 border flex items-center justify-center overflow-hidden">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.productName}
+                            className="size-full object-cover cursor-zoom-in"
+                            onClick={() => setEnlargedImage(item.image || null)}
+                          />
+                        ) : (
+                          <PackageIcon className="size-8 text-muted-foreground/40" />
+                        )}
+                      </div>
+                      
+                      {/* Kanan Gambar Produk */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <div className="flex justify-between items-start gap-2 pr-6">
+                          {/* Nama produk (Truncate) */}
+                          <h4 className="font-semibold text-sm truncate">{item.productName}</h4>
+                        </div>
+                        
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 absolute top-2 right-2 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveFromCart(index)}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+
+                        {/* Variant: Bawah Nama Produk */}
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <Badge variant="secondary" className="font-normal text-[10px] px-1.5 py-0 h-4 flex items-center">
+                            {item.variantName}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-2">
+                          {/* Price: Bawah Variant */}
+                          <div className="font-bold text-sm tabular-nums text-primary">
+                            Rp {item.price.toLocaleString("id-ID")}
+                          </div>
+                          
+                          {/* Control Quantity: Kanan Variant dan Price */}
+                          <div className="flex items-center gap-1 bg-muted/30 rounded-md border p-0.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 h-6 w-6 rounded-sm bg-background/50 hover:bg-background"
+                              onClick={() => handleUpdateItemQuantity(index, item.quantity - 1)}
+                            >
+                              <MinusIcon className="size-3" />
+                            </Button>
+                            <span className="w-6 text-center font-semibold text-xs tabular-nums">
+                              {item.quantity}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 h-6 w-6 rounded-sm bg-background/50 hover:bg-background"
+                              onClick={() => handleUpdateItemQuantity(index, item.quantity + 1)}
+                            >
+                              <PlusIcon className="size-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Belum ada produk yang dipilih. Silakan cari produk di atas.
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Total Bayar Footer */}
@@ -706,5 +819,28 @@ export function TransactionFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    {enlargedImage && (
+      <Dialog open={!!enlargedImage} onOpenChange={(open) => !open && setEnlargedImage(null)}>
+        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none bg-transparent shadow-none [&>button]:hidden">
+          <div className="relative flex justify-center">
+            <img src={enlargedImage} alt="Enlarged product" className="max-w-full h-auto max-h-[85vh] object-contain rounded-md" />
+            <Button 
+              type="button" 
+              variant="secondary" 
+              size="icon" 
+              className="absolute top-2 right-2 rounded-full size-8 opacity-70 hover:opacity-100 transition-opacity"
+              onClick={() => setEnlargedImage(null)}
+            >
+              <Trash2Icon className="size-4 hidden" />
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-4">
+                <path d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z" fill="currentColor" fillRule="evenodd" clipRule="evenodd"></path>
+              </svg>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }

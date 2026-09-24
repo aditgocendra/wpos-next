@@ -442,7 +442,7 @@ export class TransactionService {
     input: UpdateTransactionInput,
     userId: string
   ): Promise<TransactionData> {
-    return await this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const existing = await tx.transaction.findUnique({
         where: { id },
         include: {
@@ -626,13 +626,24 @@ export class TransactionService {
 
       return this.formatTransaction(updated);
     });
+
+    const uniqueVariantsToSync = Array.from(new Set([
+      ...(input.items ? input.items.map(it => it.variantId) : []),
+      ...result.items.map(it => it.variantId) // result is the updated transaction, so it contains the current items
+    ])).map(vId => ({ variantId: vId }));
+
+    shopeeSyncService
+      .pushStockUpdateToShopee(result.warehouseId, uniqueVariantsToSync)
+      .catch((err) => console.error("Shopee stock push error on update transaction:", err));
+
+    return result;
   }
 
   /**
    * Delete transaction and restore product stock
    */
   async deleteTransaction(id: string): Promise<{ success: boolean }> {
-    return await this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
       const existing = await tx.transaction.findUnique({
         where: { id },
         include: {
@@ -666,8 +677,14 @@ export class TransactionService {
         where: { id },
       });
 
-      return { success: true };
+      return { success: true, itemsToSync: existing.items.map(it => ({ variantId: it.variantId })), warehouseId: existing.warehouseId };
     });
+
+    shopeeSyncService
+      .pushStockUpdateToShopee(result.warehouseId, result.itemsToSync)
+      .catch((err) => console.error("Shopee stock push error on delete transaction:", err));
+
+    return { success: result.success };
   }
 }
 
