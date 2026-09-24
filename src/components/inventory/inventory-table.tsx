@@ -267,6 +267,10 @@ export function InventoryTable() {
       if (searchQuery.trim()) {
         params.set("search", searchQuery.trim());
       }
+      if (sorting.length > 0) {
+        params.set("sortBy", sorting[0].id);
+        params.set("sortOrder", sorting[0].desc ? "desc" : "asc");
+      }
 
       const prodRes = await fetch(`/api/inventory?${params.toString()}`);
       const prodData = await prodRes.json();
@@ -286,7 +290,7 @@ export function InventoryTable() {
     } finally {
       setLoading(false);
     }
-  }, [pagination.pageIndex, pagination.pageSize, selectedWarehouseFilter, selectedCategoryFilter, searchQuery]);
+  }, [pagination.pageIndex, pagination.pageSize, selectedWarehouseFilter, selectedCategoryFilter, searchQuery, sorting]);
 
   React.useEffect(() => {
     fetchData();
@@ -565,6 +569,7 @@ export function InventoryTable() {
     columns,
     pageCount: totalPages,
     manualPagination: true,
+    manualSorting: true,
     getRowId: (row) => row.id,
     getRowCanExpand: (row) => Boolean(row.original.variants && row.original.variants.length > 0),
     state: {
@@ -576,7 +581,6 @@ export function InventoryTable() {
     onSortingChange: setSorting,
     onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
   });
 
@@ -1318,6 +1322,7 @@ export function InventoryTable() {
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         product={selectedProductForDelete}
+        warehouses={warehouses}
         onSuccess={fetchData}
       />
 

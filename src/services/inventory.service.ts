@@ -99,12 +99,23 @@ export interface AddStockInput {
   priceCost: number;
 }
 
+export interface AddStockBulkInput {
+  warehouseId: string;
+  items: {
+    variantId: string;
+    stock: number;
+    priceCost: number;
+  }[];
+}
+
 export interface GetProductsParams {
   warehouseId?: string;
   categoryId?: string;
   search?: string;
   page?: number;
   limit?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
 }
 
 export interface PaginatedProductsResult {
@@ -174,12 +185,26 @@ export class InventoryService {
     const limit = hasLimit ? Number(params.limit) : undefined;
     const skip = hasLimit ? (page - 1) * limit! : undefined;
 
+    const isMemorySort = params.sortBy === "totalStock" || params.sortBy === "stock";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderByClause: any = {};
+    if (!isMemorySort && params.sortBy) {
+      if (params.sortBy === "category") {
+        orderByClause.category = { name: params.sortOrder === "asc" ? "asc" : "desc" };
+      } else {
+        orderByClause[params.sortBy] = params.sortOrder === "asc" ? "asc" : "desc";
+      }
+    } else if (!isMemorySort) {
+      orderByClause.createdAt = "desc";
+    }
+
     const [total, products] = await Promise.all([
       this.db.product.count({ where: whereClause as never }),
       this.db.product.findMany({
         where: whereClause as never,
-        orderBy: { createdAt: "desc" },
-        ...(hasLimit ? { take: limit, skip } : {}),
+        ...(isMemorySort ? {} : { orderBy: orderByClause }),
+        ...(hasLimit && !isMemorySort ? { take: limit, skip } : {}),
         include: {
           category: {
             select: { id: true, name: true, code: true },
@@ -264,11 +289,24 @@ export class InventoryService {
       };
     });
 
+    let finalData = data;
+
+    if (isMemorySort) {
+      const isAsc = params.sortOrder === "asc";
+      finalData.sort((a, b) => {
+        return isAsc ? a.totalStock - b.totalStock : b.totalStock - a.totalStock;
+      });
+
+      if (hasLimit && skip !== undefined && limit !== undefined) {
+        finalData = finalData.slice(skip, skip + limit);
+      }
+    }
+
     const effectiveLimit = limit || (total > 0 ? total : 1);
     const totalPages = Math.ceil(total / effectiveLimit) || 1;
 
     return {
-      data,
+      data: finalData,
       meta: {
         total,
         page,
@@ -669,6 +707,73 @@ export class InventoryService {
     return updated;
   }
 
+  async addStockBulk(
+    productId: string,
+    input: AddStockBulkInput,
+    userId: string
+  ): Promise<ProductItem> {
+    if (!input.warehouseId) {
+      throw new Error("Gudang wajib diisi");
+    }
+    if (!input.items || input.items.length === 0) {
+      throw new Error("Tidak ada item varian yang akan ditambahkan");
+    }
+
+    await this.db.$transaction(async (tx) => {
+      for (const item of input.items) {
+        const addedStock = Math.floor(Number(item.stock) || 0);
+        if (addedStock <= 0) continue; // Skip invalid or 0 stock additions
+
+        const priceCost = Number(item.priceCost);
+        if (isNaN(priceCost) || priceCost < 0) {
+          throw new Error("Harga modal harus berupa angka valid dan tidak boleh negatif");
+        }
+
+        const targetVariant = await tx.productVariant.findUnique({
+          where: { id: item.variantId },
+          include: { warehouseStocks: { where: { warehouseId: input.warehouseId } } }
+        });
+
+        if (!targetVariant) {
+          throw new Error(`Varian produk dengan ID ${item.variantId} tidak ditemukan`);
+        }
+
+        const variantStockRecord = targetVariant.warehouseStocks[0];
+        const oldVariantStock = variantStockRecord ? variantStockRecord.stock : 0;
+        const oldVariantPriceCost = variantStockRecord ? variantStockRecord.priceCost : targetVariant.priceCost;
+
+        const newVariantStock = oldVariantStock + addedStock;
+        const newVariantPriceCost =
+          newVariantStock > 0
+            ? Math.round(
+                (((oldVariantStock * oldVariantPriceCost) + (addedStock * priceCost)) /
+                  newVariantStock) *
+                  100
+              ) / 100
+            : priceCost;
+
+        await tx.productVariant.update({
+          where: { id: targetVariant.id },
+          data: {
+            updatedById: userId,
+          },
+        });
+
+        await tx.productVariantStock.upsert({
+          where: { variantId_warehouseId: { variantId: targetVariant.id, warehouseId: input.warehouseId } },
+          update: { stock: newVariantStock, priceCost: newVariantPriceCost },
+          create: { variantId: targetVariant.id, warehouseId: input.warehouseId, stock: newVariantStock, priceCost: newVariantPriceCost }
+        });
+      }
+    });
+
+    const updated = await this.getProductById(productId);
+    if (!updated) {
+      throw new Error("Gagal mengambil data produk setelah menambah stok");
+    }
+    return updated;
+  }
+
   async addStock(
     productId: string,
     input: AddStockInput,
@@ -729,7 +834,7 @@ export class InventoryService {
     return updated;
   }
 
-  async deleteProduct(id: string): Promise<{ success: boolean }> {
+  async deleteProduct(id: string, warehouseId?: string): Promise<{ success: boolean }> {
     const existing = await this.db.product.findUnique({
       where: { id },
       include: {
@@ -740,6 +845,18 @@ export class InventoryService {
 
     if (!existing) {
       throw new Error("Produk tidak ditemukan");
+    }
+
+    if (warehouseId && warehouseId !== "ALL") {
+      await this.db.productVariantStock.deleteMany({
+        where: {
+          warehouseId: warehouseId,
+          variant: {
+            productId: id
+          }
+        }
+      });
+      return { success: true };
     }
 
     if (existing.transactionItems.length > 0) {

@@ -106,8 +106,11 @@ export async function DELETE(req: Request, context: RouteContext) {
       );
     }
 
+    const { searchParams } = new URL(req.url);
+    const warehouseId = searchParams.get("warehouseId") || undefined;
+
     const { id } = await context.params;
-    const result = await inventoryService.deleteProduct(id);
+    const result = await inventoryService.deleteProduct(id, warehouseId);
 
     return NextResponse.json(result);
   } catch (error) {

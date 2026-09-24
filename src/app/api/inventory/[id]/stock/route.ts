@@ -22,7 +22,29 @@ export async function POST(req: Request, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const { variantId, warehouseId, stock, priceCost } = await req.json();
+    const body = await req.json();
+
+    if (body.items && Array.isArray(body.items)) {
+      if (!body.warehouseId || body.items.length === 0) {
+        return NextResponse.json(
+          { error: "Gudang dan minimal 1 varian wajib diisi" },
+          { status: 400 }
+        );
+      }
+      
+      const product = await inventoryService.addStockBulk(
+        id,
+        {
+          warehouseId: body.warehouseId,
+          items: body.items,
+        },
+        session.user.id
+      );
+      
+      return NextResponse.json({ product });
+    }
+
+    const { variantId, warehouseId, stock, priceCost } = body;
 
     if (!variantId || !warehouseId || stock === undefined || priceCost === undefined) {
       return NextResponse.json(
