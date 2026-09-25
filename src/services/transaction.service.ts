@@ -11,12 +11,14 @@ export interface CreateTransactionInput {
   warehouseId: string;
   items: TransactionItemInput[];
   notes?: string;
+  discount?: number;
 }
 
 export interface UpdateTransactionInput {
   warehouseId?: string;
   items?: TransactionItemInput[];
   notes?: string;
+  discount?: number;
 }
 
 export interface GetTransactionsParams {
@@ -46,6 +48,7 @@ export interface TransactionData {
   warehouseId: string;
   warehouse: { id: string; name: string; code: string | null };
   totalAmount: number;
+  discount: number;
   notes: string | null;
   createdById: string;
   createdBy: { id: string; name: string | null; email: string };
@@ -100,6 +103,7 @@ export class TransactionService {
       warehouseId: t.warehouseId,
       warehouse: t.warehouse,
       totalAmount: t.totalAmount,
+      discount: t.discount || 0,
       notes: t.notes,
       createdById: t.createdById,
       createdBy: t.createdBy,
@@ -360,12 +364,15 @@ export class TransactionService {
 
       // 4. Create Transaction record
       const transactionNumber = this.generateTransactionNumber();
+      const discount = input.discount || 0;
+      const finalAmount = Math.max(0, totalAmount - discount);
 
       const created = await tx.transaction.create({
         data: {
           transactionNumber,
           warehouseId: input.warehouseId,
-          totalAmount,
+          totalAmount: finalAmount,
+          discount,
           notes: input.notes?.trim() || null,
           createdById: userId,
           items: {
@@ -461,7 +468,7 @@ export class TransactionService {
 
       const targetWarehouseId = input.warehouseId || existing.warehouseId;
 
-      let totalAmount = existing.totalAmount;
+      let grossAmount = existing.items.reduce((sum, item) => sum + item.totalPrice, 0);
 
       if (input.items && Array.isArray(input.items)) {
         if (input.items.length === 0) {
@@ -495,7 +502,7 @@ export class TransactionService {
           costPrice: number;
         }[] = [];
 
-        totalAmount = 0;
+        grossAmount = 0;
 
         for (const item of input.items) {
           if (!item.quantity || item.quantity <= 0) {
@@ -533,7 +540,7 @@ export class TransactionService {
           const costPrice = stockRecord?.priceCost || variant.priceCost || 0;
           const itemTotalPrice = price * item.quantity;
 
-          totalAmount += itemTotalPrice;
+          grossAmount += itemTotalPrice;
 
           preparedItems.push({
             productId: item.productId,
@@ -572,12 +579,16 @@ export class TransactionService {
         });
       }
 
+      const discount = input.discount !== undefined ? input.discount : existing.discount;
+      const finalAmount = Math.max(0, grossAmount - discount);
+
       const updated = await tx.transaction.update({
         where: { id },
         data: {
           warehouseId: targetWarehouseId,
           notes: input.notes !== undefined ? (input.notes?.trim() || null) : existing.notes,
-          totalAmount,
+          totalAmount: finalAmount,
+          discount,
           updatedById: userId,
         },
         include: {

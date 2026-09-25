@@ -103,6 +103,7 @@ export function TransactionFormDialog({
   // Form State
   const [selectedWarehouseId, setSelectedWarehouseId] = React.useState<string>("");
   const [notes, setNotes] = React.useState<string>("");
+  const [discount, setDiscount] = React.useState<number>(0);
   const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
 
   // Product Search State (Async with Debounce)
@@ -183,6 +184,7 @@ export function TransactionFormDialog({
       if (transaction) {
         setSelectedWarehouseId(transaction.warehouseId);
         setNotes(transaction.notes || "");
+        setDiscount(transaction.discount || 0);
         setCartItems(
           transaction.items.map((it) => ({
             productId: it.productId,
@@ -204,6 +206,7 @@ export function TransactionFormDialog({
             : userWarehouseId || (warehouses.length > 0 ? warehouses[0].id : "");
         setSelectedWarehouseId(defaultWarehouse);
         setNotes("");
+        setDiscount(0);
         setCartItems([]);
       }
     }
@@ -227,9 +230,11 @@ export function TransactionFormDialog({
   }, [selectedProduct, selectedVariantId]);
 
   // Total Payment calculation
-  const totalAmount = React.useMemo(() => {
+  const totalItemsAmount = React.useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.totalPrice, 0);
   }, [cartItems]);
+
+  const totalAmount = Math.max(0, totalItemsAmount - discount);
 
   // Add product variant to cart
   const handleAddToCart = () => {
@@ -344,6 +349,7 @@ export function TransactionFormDialog({
       const payload = {
         warehouseId: selectedWarehouseId,
         notes: notes.trim() || undefined,
+        discount: discount,
         items: cartItems.map((item) => ({
           productId: item.productId,
           variantId: item.variantId,
@@ -786,10 +792,32 @@ export function TransactionFormDialog({
             </div>
 
             {/* Total Bayar Footer */}
-            <div className="flex justify-between items-center bg-primary/5 p-4 rounded-xl border border-primary/20 mt-3">
-              <div className="text-sm font-semibold">Total Bayar</div>
-              <div className="text-2xl font-bold text-primary tabular-nums">
-                Rp {totalAmount.toLocaleString("id-ID")}
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-primary/5 p-4 rounded-xl border border-primary/20 mt-3 gap-4">
+              <div className="flex flex-col gap-1">
+                <div className="text-sm font-semibold">Subtotal</div>
+                <div className="text-sm text-muted-foreground">Rp {totalItemsAmount.toLocaleString("id-ID")}</div>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Diskon (Rp)</Label>
+                  <Input 
+                    type="number" 
+                    min={0}
+                    value={discount === 0 ? "" : discount} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDiscount(val === "" ? 0 : Math.max(0, parseInt(val) || 0));
+                    }} 
+                    className="w-32 bg-background text-right h-9"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="flex flex-col sm:items-end gap-1 sm:border-l border-primary/20 sm:pl-4">
+                  <div className="text-sm font-semibold">Total Bayar</div>
+                  <div className="text-2xl font-bold text-primary tabular-nums">
+                    Rp {totalAmount.toLocaleString("id-ID")}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

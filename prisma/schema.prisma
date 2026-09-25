@@ -209,6 +209,7 @@ model Transaction {
   warehouseId       String
   warehouse         Warehouse         @relation(fields: [warehouseId], references: [id])
   totalAmount       Float             @default(0.0)
+  discount          Float             @default(0.0)
   notes             String?
   createdById       String
   updatedById       String?
