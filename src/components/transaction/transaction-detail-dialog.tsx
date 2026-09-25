@@ -193,10 +193,26 @@ export function TransactionDetailDialog({
             </div>
 
             {/* Total Bayar Footer */}
-            <div className="flex justify-between items-center bg-muted/60 p-4 rounded-xl border mt-3">
-              <div className="text-sm font-semibold">Total Pembayaran</div>
-              <div className="text-xl font-bold text-primary tabular-nums">
-                Rp {transaction.totalAmount.toLocaleString("id-ID")}
+            <div className="bg-muted/60 p-4 rounded-xl border mt-3 space-y-2">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-muted-foreground">Subtotal</div>
+                <div className="text-sm font-semibold tabular-nums">
+                  Rp {(transaction.totalAmount + (transaction.discount || 0)).toLocaleString("id-ID")}
+                </div>
+              </div>
+              {transaction.discount > 0 && (
+                <div className="flex justify-between items-center text-destructive">
+                  <div className="text-sm font-medium">Diskon</div>
+                  <div className="text-sm font-semibold tabular-nums">
+                    - Rp {transaction.discount.toLocaleString("id-ID")}
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-between items-center border-t pt-2 mt-2">
+                <div className="text-sm font-bold">Total Pembayaran</div>
+                <div className="text-xl font-bold text-primary tabular-nums">
+                  Rp {transaction.totalAmount.toLocaleString("id-ID")}
+                </div>
               </div>
             </div>
           </div>

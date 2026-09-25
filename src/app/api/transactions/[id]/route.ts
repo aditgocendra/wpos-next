@@ -54,7 +54,7 @@ export async function PUT(
 
     const { id } = await params;
     const body = await req.json();
-    const { warehouseId, items, notes } = body;
+    const { warehouseId, items, notes, discount } = body;
 
     const transaction = await transactionService.updateTransaction(
       id,
@@ -62,6 +62,7 @@ export async function PUT(
         warehouseId,
         items,
         notes,
+        discount,
       },
       session.user.id
     );

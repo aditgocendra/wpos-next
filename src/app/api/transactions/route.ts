@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { items, notes } = body;
+    const { items, notes, discount } = body;
     let warehouseId = body.warehouseId;
 
     if (session.user.role === "CASHIER" && session.user.warehouseId) {
@@ -84,6 +84,7 @@ export async function POST(req: Request) {
         warehouseId,
         items,
         notes,
+        discount,
       },
       session.user.id
     );
