@@ -405,7 +405,8 @@ export function TransactionTable() {
 
       {/* Main Table - Data Table 10 Pattern */}
       <div className="rounded-xl border bg-card shadow-xs overflow-hidden">
-        <Table>
+        <div className="hidden md:block">
+          <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="bg-muted/50 text-xs">
@@ -477,6 +478,94 @@ export function TransactionTable() {
             )}
           </TableBody>
         </Table>
+        </div>
+        
+        {/* Mobile Card List */}
+        <div className="md:hidden p-4 space-y-4">
+          {loading && transactions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 py-8 text-sm text-muted-foreground border rounded-xl bg-background">
+              <Loader2Icon className="size-6 animate-spin text-primary" />
+              <span>Memuat data transaksi...</span>
+            </div>
+          ) : table.getRowModel().rows?.length ? (
+            table.getRowModel().rows.map((row) => {
+              const item = row.original;
+              
+              return (
+                <div key={row.id} className="rounded-xl border bg-background p-4 space-y-3 shadow-xs">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-primary font-mono text-sm truncate">
+                        {item.transactionNumber}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {formatDateTime(item.createdAt)}
+                      </div>
+                    </div>
+                    <div className="font-semibold tabular-nums text-sm shrink-0 whitespace-nowrap">
+                      Rp {item.totalAmount.toLocaleString("id-ID")}
+                    </div>
+                  </div>
+
+                  <div className="text-sm font-medium">
+                    {item.productNames.length === 0 ? (
+                      <span className="text-muted-foreground">-</span>
+                    ) : (
+                      item.productNames.join(", ")
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate pr-2">
+                      <WarehouseIcon className="size-3.5 shrink-0" />
+                      <span className="truncate">{item.warehouse?.name || "-"}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-end gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 text-muted-foreground hover:text-foreground"
+                        title="Lihat Detail"
+                        onClick={() => setDetailTransaction(item)}
+                      >
+                        <EyeIcon className="size-4" />
+                      </Button>
+
+                      {isSuperAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-primary"
+                          title="Edit Transaksi"
+                          onClick={() => setEditTransaction(item)}
+                        >
+                          <PencilIcon className="size-4" />
+                        </Button>
+                      )}
+
+                      {isSuperAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-destructive"
+                          title="Hapus Transaksi"
+                          onClick={() => setDeleteTransaction(item)}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex items-center justify-center py-10 border rounded-xl bg-background text-muted-foreground text-sm">
+              Tidak ada transaksi yang ditemukan.
+            </div>
+          )}
+        </div>
 
         {/* Pagination Controls */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t text-sm text-muted-foreground">

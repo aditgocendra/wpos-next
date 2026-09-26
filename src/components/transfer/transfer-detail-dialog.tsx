@@ -180,7 +180,7 @@ export function TransferDetailDialog({
               <LayersIcon className="size-4 text-primary" />
               Daftar Produk & Varian yang Ditransfer ({transfer.items.length} Item)
             </div>
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-lg border overflow-hidden hidden md:block">
               <Table>
                 <TableHeader className="bg-muted/50">
                   <TableRow>
@@ -215,6 +215,41 @@ export function TransferDetailDialog({
                   ))}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile Card List */}
+            <div className="md:hidden space-y-3">
+              {transfer.items && transfer.items.length > 0 ? (
+                transfer.items.map((item, idx) => (
+                  <div key={item.id || idx} className="rounded-md border bg-card p-3 shadow-xs space-y-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="font-medium text-sm flex items-center gap-1.5">
+                          <span className="text-xs text-muted-foreground">#{idx + 1}</span>
+                          {item.productName}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <Badge variant="outline" className="font-normal text-[10px] py-0">
+                            {item.variantName}
+                          </Badge>
+                          {item.sku && item.sku !== "-" && (
+                            <span className="text-[10px] font-mono text-muted-foreground">SKU: {item.sku}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-bold text-primary text-sm">
+                          Qty: {item.quantity}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 border rounded-md bg-card text-muted-foreground text-sm">
+                  Tidak ada rincian item barang.
+                </div>
+              )}
             </div>
           </div>
         </div>
