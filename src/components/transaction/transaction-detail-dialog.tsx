@@ -139,7 +139,7 @@ export function TransactionDetailDialog({
               </div>
             </div>
 
-            <div className="rounded-md border overflow-hidden">
+            <div className="rounded-md border overflow-hidden hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 text-xs">
@@ -190,6 +190,41 @@ export function TransactionDetailDialog({
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile Card List */}
+            <div className="md:hidden space-y-3">
+              {transaction.items && transaction.items.length > 0 ? (
+                transaction.items.map((item) => (
+                  <div key={item.id} className="rounded-md border bg-card p-3 shadow-xs space-y-2">
+                    <div className="flex justify-between items-start gap-2">
+                      <div>
+                        <div className="font-medium text-sm">{item.productName}</div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <Badge variant="outline" className="font-normal text-[10px] py-0">
+                            {item.variantName}
+                          </Badge>
+                          {item.sku && item.sku !== "-" && (
+                            <span className="text-[10px] text-muted-foreground">SKU: {item.sku}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-semibold text-primary text-sm tabular-nums">
+                          Rp {item.totalPrice.toLocaleString("id-ID")}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          {item.quantity} x Rp {item.price.toLocaleString("id-ID")}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 border rounded-md bg-card text-muted-foreground text-sm">
+                  Tidak ada rincian item barang.
+                </div>
+              )}
             </div>
 
             {/* Total Bayar Footer */}

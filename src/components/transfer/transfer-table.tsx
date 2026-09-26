@@ -410,17 +410,17 @@ export function TransferTable() {
       </div>
 
       {/* Filter and Search Controls */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-3 rounded-xl border bg-card p-3 shadow-xs">
-        <div className="flex flex-1 flex-wrap items-center gap-3 w-full md:w-auto">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 rounded-xl border bg-card p-4 shadow-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-3 w-full lg:w-auto flex-1">
           {/* Search Input */}
-          <div className="relative w-full md:w-72">
+          <div className="relative w-full sm:col-span-2 lg:w-72">
             <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
             <Input
               type="text"
               placeholder="Cari nomor transfer, produk atau SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-8 text-xs h-9"
+              className="pl-8 pr-8 text-xs h-9 w-full"
             />
             {searchQuery && (
               <button
@@ -435,7 +435,7 @@ export function TransferTable() {
           </div>
 
           {/* Filter Warehouse */}
-          <div className="w-full sm:w-48">
+          <div className="w-full lg:w-48">
             <Select
               value={selectedWarehouseFilter}
               onValueChange={(val) => {
@@ -443,7 +443,7 @@ export function TransferTable() {
               }}
               disabled={currentUserRole === "WAREHOUSE_ADMIN" && Boolean(userWarehouseId)}
             >
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-9 text-xs w-full">
                 <SelectValue placeholder="Semua Gudang" />
               </SelectTrigger>
               <SelectContent>
@@ -460,14 +460,14 @@ export function TransferTable() {
           </div>
 
           {/* Filter Status */}
-          <div className="w-full sm:w-44">
+          <div className="w-full lg:w-44">
             <Select
               value={selectedStatusFilter}
               onValueChange={(val) => {
                 if (val) setSelectedStatusFilter(val);
               }}
             >
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-9 text-xs w-full">
                 <SelectValue placeholder="Semua Status" />
               </SelectTrigger>
               <SelectContent>
@@ -494,20 +494,20 @@ export function TransferTable() {
           {(searchQuery ||
             selectedWarehouseFilter !== "ALL" ||
             selectedStatusFilter !== "ALL") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedWarehouseFilter("ALL");
-                setSelectedStatusFilter("ALL");
-              }}
-              className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
-            >
-              <RotateCcwIcon className="size-3.5" />
-              Reset Filter
-            </Button>
-          )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedWarehouseFilter("ALL");
+                  setSelectedStatusFilter("ALL");
+                }}
+                className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0 w-full sm:col-span-2 lg:w-auto"
+              >
+                <RotateCcwIcon className="size-3.5" />
+                Reset Filter
+              </Button>
+            )}
         </div>
 
         <Button
@@ -515,7 +515,7 @@ export function TransferTable() {
           size="sm"
           onClick={fetchTransfers}
           disabled={loading}
-          className="h-9 gap-1.5 text-xs shrink-0 self-end md:self-auto"
+          className="h-9 gap-1.5 text-xs shrink-0 w-full lg:w-auto"
         >
           <RefreshCwIcon
             className={cn("size-3.5", loading && "animate-spin")}
@@ -531,7 +531,7 @@ export function TransferTable() {
       )}
 
       {/* Main Data Table (data-table-10 pattern) */}
-      <div className="rounded-md border bg-card shadow-xs overflow-hidden">
+      <div className="rounded-md border bg-card shadow-xs overflow-hidden hidden md:block">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -547,7 +547,7 @@ export function TransferTable() {
                         <div
                           className={cn(
                             header.column.getCanSort() &&
-                              "flex h-full cursor-pointer items-center justify-between gap-2 select-none"
+                            "flex h-full cursor-pointer items-center justify-between gap-2 select-none"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                           onKeyDown={(e) => {
@@ -634,15 +634,15 @@ export function TransferTable() {
                     <ArrowRightLeftIcon className="size-8 text-muted-foreground/40 mb-1" />
                     <span className="font-medium text-foreground">
                       {searchQuery ||
-                      selectedWarehouseFilter !== "ALL" ||
-                      selectedStatusFilter !== "ALL"
+                        selectedWarehouseFilter !== "ALL" ||
+                        selectedStatusFilter !== "ALL"
                         ? "Tidak ada data transfer stok yang cocok dengan filter pencarian"
                         : "Tidak ada data transfer stok"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {searchQuery ||
-                      selectedWarehouseFilter !== "ALL" ||
-                      selectedStatusFilter !== "ALL" ? (
+                        selectedWarehouseFilter !== "ALL" ||
+                        selectedStatusFilter !== "ALL" ? (
                         <Button
                           variant="link"
                           size="sm"
@@ -665,6 +665,154 @@ export function TransferTable() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Mobile Card List */}
+      <div className="md:hidden space-y-4">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-8 border rounded-md bg-card shadow-xs text-sm text-muted-foreground">
+            <Loader2Icon className="size-6 animate-spin text-primary" />
+            <span>Memuat data transfer stok...</span>
+          </div>
+        ) : table.getRowModel().rows?.length ? (
+          table.getRowModel().rows.map((row) => {
+            const t = row.original;
+            const isPending = t.status === "PENDING";
+
+            return (
+              <div key={row.id} className="rounded-md border bg-card p-4 space-y-3 shadow-xs">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-medium text-foreground">
+                      {t.productNames[0] || "Produk"}
+                    </div>
+                    {t.productNames.length > 1 && (
+                      <div className="text-xs text-muted-foreground">
+                        +{t.productNames.length - 1} produk lain ({t.items.length} varian)
+                      </div>
+                    )}
+                    <div className="text-[11px] font-mono text-muted-foreground mt-1">
+                      {t.transferNumber}
+                    </div>
+                  </div>
+                  <div>
+                    {getStatusBadge(t.status)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                  <div>
+                    <span className="text-xs block mb-1">Asal:</span>
+                    <div className="flex items-center gap-1.5 font-medium text-foreground text-xs">
+                      <WarehouseIcon className="size-3.5 text-amber-500 shrink-0" />
+                      <span className="truncate">{t.sourceWarehouse?.name}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs block mb-1">Tujuan:</span>
+                    <div className="flex items-center gap-1.5 font-medium text-foreground text-xs">
+                      <WarehouseIcon className="size-3.5 text-emerald-500 shrink-0" />
+                      <span className="truncate">{t.destinationWarehouse?.name}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-3 border-t">
+                  <div className="text-xs font-mono text-muted-foreground">
+                    {formatDateTime(t.createdAt)}
+                  </div>
+                  <div className="font-bold text-foreground text-sm">
+                    {t.totalQuantity} <span className="text-xs font-normal text-muted-foreground">unit</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-1.5 pt-3 border-t">
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => {
+                      setSelectedTransferForDetail(t);
+                      setDetailDialogOpen(true);
+                    }}
+                    title="Lihat Detail"
+                    className="hover:bg-primary/10 hover:text-primary"
+                  >
+                    <EyeIcon className="size-3.5" />
+                  </Button>
+
+                  {isPending && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => {
+                        setSelectedTransferForEdit(t);
+                        setFormDialogOpen(true);
+                      }}
+                      title="Edit Transfer"
+                      className="hover:bg-amber-500/10 hover:text-amber-600"
+                    >
+                      <PencilIcon className="size-3.5" />
+                    </Button>
+                  )}
+
+                  {isPending && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => {
+                        setSelectedTransferForApprove(t);
+                        setApproveDialogOpen(true);
+                      }}
+                      title="Approve / Eksekusi Transfer"
+                      className="hover:bg-green-500/10 text-green-600 dark:text-green-400"
+                    >
+                      <CheckCircle2Icon className="size-3.5" />
+                    </Button>
+                  )}
+
+                  {isPending && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => {
+                        setSelectedTransferForReject(t);
+                        setRejectDialogOpen(true);
+                      }}
+                      title="Reject / Batalkan Transfer"
+                      className="hover:bg-destructive/10 text-destructive"
+                    >
+                      <XCircleIcon className="size-3.5" />
+                    </Button>
+                  )}
+
+                  {isSuperAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => {
+                        setSelectedTransferForDelete(t);
+                        setDeleteDialogOpen(true);
+                      }}
+                      title="Hapus Transfer (Super Admin)"
+                      className="hover:bg-destructive/10 text-destructive"
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-1.5 py-8 border rounded-md bg-card shadow-xs text-sm text-muted-foreground">
+            <ArrowRightLeftIcon className="size-8 text-muted-foreground/40 mb-1" />
+            <span className="font-medium text-foreground text-center px-4">
+              {searchQuery || selectedWarehouseFilter !== "ALL" || selectedStatusFilter !== "ALL"
+                ? "Tidak ada data transfer stok yang cocok dengan filter pencarian"
+                : "Tidak ada data transfer stok"}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Pagination Controls (data-table-10 pattern) */}
@@ -698,12 +846,12 @@ export function TransferTable() {
             {transfers.length === 0
               ? 0
               : table.getState().pagination.pageIndex *
-                  table.getState().pagination.pageSize +
-                1}
+              table.getState().pagination.pageSize +
+              1}
             -
             {Math.min(
               (table.getState().pagination.pageIndex + 1) *
-                table.getState().pagination.pageSize,
+              table.getState().pagination.pageSize,
               table.getRowCount()
             )}
           </span>{" "}
