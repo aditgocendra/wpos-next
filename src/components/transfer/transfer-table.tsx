@@ -494,20 +494,20 @@ export function TransferTable() {
           {(searchQuery ||
             selectedWarehouseFilter !== "ALL" ||
             selectedStatusFilter !== "ALL") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchQuery("");
-                setSelectedWarehouseFilter("ALL");
-                setSelectedStatusFilter("ALL");
-              }}
-              className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0 w-full sm:col-span-2 lg:w-auto"
-            >
-              <RotateCcwIcon className="size-3.5" />
-              Reset Filter
-            </Button>
-          )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedWarehouseFilter("ALL");
+                  setSelectedStatusFilter("ALL");
+                }}
+                className="h-9 gap-1.5 text-xs text-muted-foreground hover:text-foreground shrink-0 w-full sm:col-span-2 lg:w-auto"
+              >
+                <RotateCcwIcon className="size-3.5" />
+                Reset Filter
+              </Button>
+            )}
         </div>
 
         <Button
@@ -547,7 +547,7 @@ export function TransferTable() {
                         <div
                           className={cn(
                             header.column.getCanSort() &&
-                              "flex h-full cursor-pointer items-center justify-between gap-2 select-none"
+                            "flex h-full cursor-pointer items-center justify-between gap-2 select-none"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                           onKeyDown={(e) => {
@@ -634,15 +634,15 @@ export function TransferTable() {
                     <ArrowRightLeftIcon className="size-8 text-muted-foreground/40 mb-1" />
                     <span className="font-medium text-foreground">
                       {searchQuery ||
-                      selectedWarehouseFilter !== "ALL" ||
-                      selectedStatusFilter !== "ALL"
+                        selectedWarehouseFilter !== "ALL" ||
+                        selectedStatusFilter !== "ALL"
                         ? "Tidak ada data transfer stok yang cocok dengan filter pencarian"
                         : "Tidak ada data transfer stok"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {searchQuery ||
-                      selectedWarehouseFilter !== "ALL" ||
-                      selectedStatusFilter !== "ALL" ? (
+                        selectedWarehouseFilter !== "ALL" ||
+                        selectedStatusFilter !== "ALL" ? (
                         <Button
                           variant="link"
                           size="sm"
@@ -678,7 +678,7 @@ export function TransferTable() {
           table.getRowModel().rows.map((row) => {
             const t = row.original;
             const isPending = t.status === "PENDING";
-            
+
             return (
               <div key={row.id} className="rounded-md border bg-card p-4 space-y-3 shadow-xs">
                 <div className="flex items-start justify-between">
@@ -846,12 +846,12 @@ export function TransferTable() {
             {transfers.length === 0
               ? 0
               : table.getState().pagination.pageIndex *
-                  table.getState().pagination.pageSize +
-                1}
+              table.getState().pagination.pageSize +
+              1}
             -
             {Math.min(
               (table.getState().pagination.pageIndex + 1) *
-                table.getState().pagination.pageSize,
+              table.getState().pagination.pageSize,
               table.getRowCount()
             )}
           </span>{" "}
