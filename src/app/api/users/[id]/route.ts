@@ -30,6 +30,7 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       role: body.role,
       warehouseId: body.warehouseId,
       status: body.status,
+      phoneNumber: body.phoneNumber,
     });
 
     return NextResponse.json({ user: updatedUser });

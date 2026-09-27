@@ -6,6 +6,7 @@ export interface UserItem {
   id: string;
   name: string | null;
   email: string;
+  phoneNumber: string | null;
   role: Role;
   status: UserStatus;
   warehouseId: string | null;
@@ -17,6 +18,7 @@ export interface UserItem {
 export interface CreateUserInput {
   name?: string | null;
   email: string;
+  phoneNumber?: string | null;
   password: string;
   role: Role;
   warehouseId?: string | null;
@@ -26,6 +28,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   name?: string | null;
   email?: string;
+  phoneNumber?: string | null;
   password?: string;
   role?: Role;
   warehouseId?: string | null;
@@ -103,6 +106,7 @@ export class UserService {
       data: {
         name: input.name?.trim() || null,
         email,
+        phoneNumber: input.phoneNumber?.trim() || null,
         password: hashedPassword,
         role: input.role,
         status: input.status || "ACTIVE",
@@ -130,6 +134,7 @@ export class UserService {
     const updateData: {
       name?: string | null;
       email?: string;
+      phoneNumber?: string | null;
       password?: string;
       role?: Role;
       status?: UserStatus;
@@ -149,6 +154,10 @@ export class UserService {
         throw new Error("Email already registered");
       }
       updateData.email = email;
+    }
+
+    if (input.phoneNumber !== undefined) {
+      updateData.phoneNumber = input.phoneNumber ? input.phoneNumber.trim() : null;
     }
 
     if (input.password && input.password.trim() !== "") {

@@ -35,6 +35,7 @@ describe("UserService Unit Tests", () => {
     password: "$2b$10$hashedpassword123",
     role: "WAREHOUSE_ADMIN" as Role,
     status: "ACTIVE" as UserStatus,
+    phoneNumber: null,
     warehouseId: "wh-1",
     warehouse: sampleWarehouse,
     createdAt: new Date(),

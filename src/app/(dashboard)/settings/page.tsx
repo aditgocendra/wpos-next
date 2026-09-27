@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { SettingsIcon, RefreshCwIcon, SaveIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +24,9 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [shopeeWebhookEnabled, setShopeeWebhookEnabled] = useState(true); // Default true
+  const [fonnteEnabled, setFonnteEnabled] = useState(false);
+  const [fonnteToken, setFonnteToken] = useState("");
+  const [savingFonnteToken, setSavingFonnteToken] = useState(false);
 
   // Ensure only SUPER_ADMIN can see the real settings (or API will reject anyway)
   const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
@@ -41,6 +45,13 @@ export default function SettingsPage() {
       // Parse SHOPEE_WEBHOOK_ENABLED
       if (data["SHOPEE_WEBHOOK_ENABLED"] !== undefined) {
         setShopeeWebhookEnabled(data["SHOPEE_WEBHOOK_ENABLED"] === "true");
+      }
+
+      if (data["FONNTE_ENABLED"] !== undefined) {
+        setFonnteEnabled(data["FONNTE_ENABLED"] === "true");
+      }
+      if (data["FONNTE_TOKEN"] !== undefined) {
+        setFonnteToken(data["FONNTE_TOKEN"]);
       }
     } catch (error) {
       console.error(error);
@@ -80,6 +91,60 @@ export default function SettingsPage() {
       toast.error(error.message || "Gagal mengubah pengaturan");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleToggleFonnte = async (checked: boolean) => {
+    try {
+      setSaving(true);
+      setFonnteEnabled(checked);
+      
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "FONNTE_ENABLED",
+          value: checked ? "true" : "false",
+          description: "Mengaktifkan pengiriman notifikasi WhatsApp melalui Fonnte",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Gagal menyimpan pengaturan Fonnte");
+
+      toast.success(
+        `Notifikasi Fonnte berhasil ${checked ? "diaktifkan" : "dimatikan"}.`
+      );
+    } catch (error: any) {
+      console.error(error);
+      setFonnteEnabled(!checked);
+      toast.error(error.message || "Gagal mengubah pengaturan Fonnte");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveFonnteToken = async () => {
+    try {
+      setSavingFonnteToken(true);
+      
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "FONNTE_TOKEN",
+          value: fonnteToken,
+          description: "Device Token Fonnte untuk API Fonnte",
+        }),
+      });
+
+      if (!res.ok) throw new Error("Gagal menyimpan token Fonnte");
+
+      toast.success("Token Fonnte berhasil disimpan.");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Gagal menyimpan token Fonnte");
+    } finally {
+      setSavingFonnteToken(false);
     }
   };
 
@@ -165,6 +230,55 @@ export default function SettingsPage() {
                         disabled={saving}
                       />
                     </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Integrasi Fonnte (WhatsApp)</CardTitle>
+                  <CardDescription>
+                    Pengaturan untuk notifikasi WhatsApp menggunakan Fonnte.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {loading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <RefreshCwIcon className="size-4 animate-spin" />
+                      <span>Memuat status...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                        <div className="space-y-0.5">
+                          <Label className="text-base font-semibold">
+                            Aktifkan Notifikasi WhatsApp
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Kirim notifikasi ke admin gudang jika ada perubahan harga jual.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={fonnteEnabled}
+                          onCheckedChange={handleToggleFonnte}
+                          disabled={saving}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Device Token Fonnte</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Masukkan Device Token Fonnte"
+                            value={fonnteToken}
+                            onChange={(e) => setFonnteToken(e.target.value)}
+                          />
+                          <Button onClick={handleSaveFonnteToken} disabled={savingFonnteToken}>
+                            {savingFonnteToken ? <RefreshCwIcon className="size-4 animate-spin" /> : <SaveIcon className="size-4" />}
+                            <span className="sr-only">Simpan Token</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>

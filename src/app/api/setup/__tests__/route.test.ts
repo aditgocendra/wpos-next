@@ -100,6 +100,7 @@ describe("API /api/setup Unit Tests", () => {
         id: "u-super",
         name: "Super Admin",
         email: "admin@wpos.com",
+        phoneNumber: null,
         role: "SUPER_ADMIN",
         status: "ACTIVE",
         warehouseId: null,

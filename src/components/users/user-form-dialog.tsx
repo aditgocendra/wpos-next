@@ -61,6 +61,7 @@ export function UserFormDialog({
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [phoneNumber, setPhoneNumber] = React.useState("");
   const [role, setRole] = React.useState<"WAREHOUSE_ADMIN" | "CASHIER">("WAREHOUSE_ADMIN");
   const [warehouseId, setWarehouseId] = React.useState<string>("");
   const [status, setStatus] = React.useState<"ACTIVE" | "INACTIVE">("ACTIVE");
@@ -75,12 +76,14 @@ export function UserFormDialog({
       if (user) {
         setEmail(user.email);
         setPassword("");
+        setPhoneNumber((user as any).phoneNumber || "");
         setRole(user.role === "SUPER_ADMIN" ? "WAREHOUSE_ADMIN" : (user.role as "WAREHOUSE_ADMIN" | "CASHIER"));
         setWarehouseId(user.warehouseId || "");
         setStatus(user.status);
       } else {
         setEmail("");
         setPassword("");
+        setPhoneNumber("");
         setRole("WAREHOUSE_ADMIN");
         setWarehouseId(warehouses.length > 0 ? warehouses[0].id : "");
         setStatus("ACTIVE");
@@ -108,6 +111,7 @@ export function UserFormDialog({
       if (isEditing && user) {
         const payload: Record<string, unknown> = {
           email: email.trim(),
+          phoneNumber: phoneNumber.trim() || null,
           role,
           status,
           warehouseId: (role === "WAREHOUSE_ADMIN" || role === "CASHIER") ? (warehouseId || null) : null,
@@ -133,6 +137,7 @@ export function UserFormDialog({
           body: JSON.stringify({
             email: email.trim(),
             password: password.trim(),
+            phoneNumber: phoneNumber.trim() || null,
             role,
             status,
             warehouseId: (role === "WAREHOUSE_ADMIN" || role === "CASHIER") ? (warehouseId || null) : null,
@@ -204,6 +209,21 @@ export function UserFormDialog({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required={!isEditing}
+                disabled={loading}
+              />
+            </div>
+
+            {/* Phone Number Field */}
+            <div className="space-y-1.5">
+              <Label htmlFor="user-phone">
+                Phone Number (WhatsApp)
+              </Label>
+              <Input
+                id="user-phone"
+                type="text"
+                placeholder="e.g. 08123456789"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
                 disabled={loading}
               />
             </div>

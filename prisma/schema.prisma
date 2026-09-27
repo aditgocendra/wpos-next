@@ -39,6 +39,7 @@ model User {
   name                String?
   email               String           @unique
   password            String
+  phoneNumber         String?
   role                Role             @default(CASHIER)
   status              UserStatus       @default(ACTIVE)
   warehouseId         String?
