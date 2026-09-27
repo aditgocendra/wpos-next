@@ -179,6 +179,15 @@ export function UsersTable() {
         cell: () => <span className="font-mono text-muted-foreground tracking-widest">•••••</span>,
       },
       {
+        header: "Phone Number",
+        accessorKey: "phoneNumber",
+        cell: ({ row }) => (
+          <span className="text-sm font-medium text-foreground whitespace-nowrap">
+            {row.original.phoneNumber || "-"}
+          </span>
+        ),
+      },
+      {
         header: "Role",
         accessorKey: "role",
         cell: ({ row }) => {

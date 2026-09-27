@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { email, password, role, warehouseId, status, name } = body;
+    const { email, password, role, warehouseId, status, name, phoneNumber } = body;
 
     if (!email || !password || !role) {
       return NextResponse.json(
@@ -48,6 +48,7 @@ export async function POST(req: Request) {
       warehouseId,
       status,
       name,
+      phoneNumber,
     });
 
     return NextResponse.json({ user: newUser }, { status: 201 });

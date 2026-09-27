@@ -54,6 +54,7 @@ describe("AuthService Unit Tests", () => {
       email: "admin@wpos.com",
       name: "Admin User",
       password: "",
+      phoneNumber: null,
       role: "SUPER_ADMIN" as Role,
       status: "ACTIVE",
       warehouseId: null,

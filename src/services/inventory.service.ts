@@ -1,5 +1,6 @@
 import { prisma as defaultPrisma } from "@/lib/prisma";
 import { deleteStorageFiles } from "@/lib/supabase";
+import { notifyPriceChange } from "@/lib/fonnte";
 
 export interface ProductVariantStockItem {
   id: string;
@@ -614,6 +615,7 @@ export class InventoryService {
 
       const existingVariants = existing.variants;
       const imagesToDeleteFromStorage: string[] = [];
+      const priceChanges: { productName: string; variantName: string; oldPrice: number; newPrice: number }[] = [];
 
       await this.db.$transaction(async (tx) => {
         // Deteksi varian yang dihapus dan kumpulkan fotonya
@@ -639,6 +641,15 @@ export class InventoryService {
             const currentVariant = existingVariants.find((ev) => ev.id === v.id);
             if (v.image !== undefined && currentVariant?.image && currentVariant.image !== v.image) {
               imagesToDeleteFromStorage.push(currentVariant.image);
+            }
+
+            if (currentVariant && currentVariant.priceSell !== v.priceSell) {
+              priceChanges.push({
+                productName: updateProductData.name || existing.name,
+                variantName: v.variantName,
+                oldPrice: currentVariant.priceSell,
+                newPrice: v.priceSell,
+              });
             }
 
             await tx.productVariant.update({
@@ -692,6 +703,10 @@ export class InventoryService {
       // Hapus file fisik dari Supabase Storage jika ada gambar lama yang diganti / dihapus
       if (imagesToDeleteFromStorage.length > 0) {
         await deleteStorageFiles(imagesToDeleteFromStorage);
+      }
+
+      for (const change of priceChanges) {
+        notifyPriceChange(change.productName, change.variantName, change.oldPrice, change.newPrice).catch(console.error);
       }
     } else {
       await this.db.product.update({
