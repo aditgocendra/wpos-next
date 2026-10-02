@@ -422,7 +422,7 @@ export function TransactionFormDialog({
                     setProductSearch("");
                   }
                 }}
-                disabled={isEdit || userRole === "CASHIER"}
+                disabled={isEdit || userRole !== "SUPER_ADMIN"}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Pilih Gudang..." />
