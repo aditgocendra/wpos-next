@@ -368,6 +368,7 @@ export function TransactionTable() {
               onValueChange={(val) => {
                 if (val) setSelectedWarehouseFilter(val);
               }}
+              disabled={currentUserRole !== "SUPER_ADMIN"}
             >
               <SelectTrigger className="w-full bg-background">
                 <div className="flex items-center gap-2 truncate">
