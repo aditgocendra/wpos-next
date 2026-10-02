@@ -24,7 +24,13 @@ export async function GET(req: Request) {
     const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
 
     let warehouseId = warehouseIdParam;
-    if (session.user.role === "CASHIER" && session.user.warehouseId) {
+    if (session.user.role === "CASHIER") {
+      if (!session.user.warehouseId) {
+        return NextResponse.json(
+          { error: "Akun kasir Anda belum ditugaskan ke gudang manapun. Silakan hubungi admin atau login ulang." },
+          { status: 403 }
+        );
+      }
       warehouseId = session.user.warehouseId;
     }
 
@@ -60,8 +66,13 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { items, notes, discount } = body;
     let warehouseId = body.warehouseId;
-
-    if (session.user.role === "CASHIER" && session.user.warehouseId) {
+    if (session.user.role === "CASHIER") {
+      if (!session.user.warehouseId) {
+        return NextResponse.json(
+          { error: "Akun kasir Anda belum ditugaskan ke gudang manapun. Silakan hubungi admin atau login ulang." },
+          { status: 403 }
+        );
+      }
       warehouseId = session.user.warehouseId;
     }
 

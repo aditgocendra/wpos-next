@@ -200,10 +200,12 @@ export function TransactionFormDialog({
         );
       } else {
         // Create mode
-        const defaultWarehouse =
-          (userRole === "CASHIER" && userWarehouseId)
-            ? userWarehouseId
-            : userWarehouseId || (warehouses.length > 0 ? warehouses[0].id : "");
+        let defaultWarehouse = "";
+        if (userRole === "SUPER_ADMIN") {
+          defaultWarehouse = userWarehouseId || (warehouses.length > 0 ? warehouses[0].id : "");
+        } else {
+          defaultWarehouse = userWarehouseId || "";
+        }
         setSelectedWarehouseId(defaultWarehouse);
         setNotes("");
         setDiscount(0);
