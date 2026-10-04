@@ -139,13 +139,26 @@ export class ShopeeOrderService {
     const variants = uniqueSkus.length > 0
       ? await this.db.productVariant.findMany({
           where: { sku: { in: uniqueSkus } },
-          select: { sku: true, priceCost: true },
+          select: { 
+            sku: true, 
+            priceCost: true,
+            warehouseStocks: {
+              select: { priceCost: true, warehouseId: true }
+            }
+          },
         })
       : [];
 
     const hppMap = new Map<string, number>();
     for (const v of variants) {
-      hppMap.set(v.sku.toLowerCase(), v.priceCost);
+      let hpp = v.priceCost; // Default global HPP
+      if (integration.warehouseId) {
+        const whStock = v.warehouseStocks.find((ws) => ws.warehouseId === integration.warehouseId);
+        if (whStock && whStock.priceCost > 0) {
+          hpp = whStock.priceCost; // Use warehouse-specific HPP if > 0
+        }
+      }
+      hppMap.set(v.sku.toLowerCase(), hpp);
     }
 
     // Fetch monthly expense for this integration and month
