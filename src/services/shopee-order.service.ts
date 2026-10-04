@@ -499,16 +499,23 @@ export class ShopeeOrderService {
                 grossIncome: baseAmount,
               });
             } else {
+              const getItemPrice = (it: any) => {
+                if (it.model_discounted_price !== undefined && it.model_discounted_price !== null) {
+                  return Number(it.model_discounted_price);
+                }
+                return Number(it.model_original_price) || 0;
+              };
+
               // Calculate total item price sum to prorate escrow/total amount if multi-item
               const totalItemsSum = items.reduce(
-                (sum: number, it: { model_discounted_price?: number; quantity?: number; model_quantity_purchased?: number }) =>
-                  sum + (Number(it.model_discounted_price) || 0) * (Number(it.model_quantity_purchased || it.quantity) || 1),
+                (sum: number, it: any) =>
+                  sum + getItemPrice(it) * (Number(it.model_quantity_purchased || it.quantity) || 1),
                 0
               );
 
               for (const it of items) {
                 const qty = Number(it.model_quantity_purchased || it.quantity) || 1;
-                const itemPrice = Number(it.model_discounted_price || it.model_original_price) || 0;
+                const itemPrice = getItemPrice(it);
                 const itemTotal = itemPrice * qty;
 
                 // Prorate baseAmount across items
