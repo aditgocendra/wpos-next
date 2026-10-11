@@ -433,7 +433,7 @@ export class ShopeeSyncService {
 
       // 4. Potong stok produk di gudang secara transaksional ($transaction)
       const deductionLogs: string[] = [];
-      const deductedVariants: Array<{ variantId: string; sku?: string }> = [];
+      const deductedVariants: SyncStockItem[] = [];
 
       const executeInTx = async (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -793,7 +793,7 @@ export class ShopeeSyncService {
 
       // 4. Tambah kembali stok produk di gudang secara transaksional ($transaction)
       const restockLogs: string[] = [];
-      const restockedVariants: Array<{ variantId: string; sku?: string }> = [];
+      const restockedVariants: SyncStockItem[] = [];
 
       const executeInTx = async (
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
