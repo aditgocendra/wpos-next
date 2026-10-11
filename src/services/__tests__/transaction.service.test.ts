@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TransactionService } from "../transaction.service";
+import { shopeeSyncService } from "../shopee-sync.service";
+
+vi.mock("../shopee-sync.service", () => ({
+  shopeeSyncService: {
+    pushStockUpdateToShopee: vi.fn().mockResolvedValue({ success: true, pushedCount: 1 }),
+  },
+}));
 
 describe("TransactionService Unit Tests", () => {
   let transactionService: TransactionService;
@@ -196,6 +203,11 @@ describe("TransactionService Unit Tests", () => {
         data: { stock: { decrement: 2 } },
       });
       expect(mockPrisma.transaction.create).toHaveBeenCalled();
+      expect(shopeeSyncService.pushStockUpdateToShopee).toHaveBeenCalledWith(
+        "wh-1",
+        [{ productId: "prod-1", variantId: "var-1", quantity: 2 }],
+        { mode: "DELTA", deltaType: "DECREMENT" }
+      );
     });
 
     it("should throw error if warehouse is not found", async () => {
@@ -294,6 +306,11 @@ describe("TransactionService Unit Tests", () => {
       // Rollback previous quantity (2) and Deduct new quantity (3) via upsert
       expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalled();
       expect(result.totalAmount).toBe(450000);
+      expect(shopeeSyncService.pushStockUpdateToShopee).toHaveBeenCalledWith(
+        "wh-1",
+        [{ variantId: "var-1", quantity: 1 }],
+        { mode: "DELTA", deltaType: "DECREMENT" }
+      );
     });
   });
 
@@ -312,6 +329,11 @@ describe("TransactionService Unit Tests", () => {
       expect(mockPrisma.transaction.delete).toHaveBeenCalledWith({
         where: { id: "trx-123" },
       });
+      expect(shopeeSyncService.pushStockUpdateToShopee).toHaveBeenCalledWith(
+        "wh-1",
+        [{ variantId: "var-1", quantity: 2 }],
+        { mode: "DELTA", deltaType: "INCREMENT" }
+      );
     });
   });
 });

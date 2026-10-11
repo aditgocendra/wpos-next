@@ -10,6 +10,38 @@ vi.mock("@/lib/shopee/client", () => ({
           failure_list: [],
         },
       }),
+      getItemBaseInfo: vi.fn().mockResolvedValue({
+        response: {
+          item_list: [
+            {
+              item_id: 11111,
+              stock_info_v2: {
+                summary_info: { total_available_stock: 100 },
+                seller_stock: [{ stock: 100 }],
+              },
+            },
+            {
+              item_id: 22222,
+              stock_info_v2: {
+                summary_info: { total_available_stock: 70 },
+                seller_stock: [{ stock: 70 }],
+              },
+            },
+            {
+              item_id: 98765,
+              stock_info_v2: {
+                summary_info: { total_available_stock: 45 },
+                seller_stock: [{ stock: 45 }],
+              },
+            },
+          ],
+        },
+      }),
+      getModelList: vi.fn().mockResolvedValue({
+        response: {
+          model: [],
+        },
+      }),
     },
     order: {
       getOrderDetail: vi.fn().mockResolvedValue({
@@ -265,43 +297,36 @@ describe("ShopeeSyncService Unit Tests", () => {
         stock: 45,
       });
 
-      // Gudang A terhubung dengan Toko A dan Toko B
-      mockPrisma.integration.findMany.mockResolvedValue([
+      // Gudang A terhubung dengan Toko A dan Toko B. Tapi Toko A di-exclude karena stoknya sudah dipotong oleh Shopee langsung
+      mockPrisma.integration.findMany.mockImplementation(async (args: any) => {
+        const notId = args?.where?.id?.not;
+        const all = [
+          {
+            id: "int-shop-a",
+            shopId: "shop-A",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+          {
+            id: "int-shop-b",
+            shopId: "shop-B",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+        ];
+        return notId ? all.filter((i) => i.id !== notId) : all;
+      });
+
+      mockPrisma.productIntegration.findMany.mockResolvedValue([
         {
-          id: "int-shop-a",
-          shopId: "shop-A",
-          warehouseId: "wh-gudang-a",
-          status: "ACTIVE",
-        },
-        {
-          id: "int-shop-b",
-          shopId: "shop-B",
-          warehouseId: "wh-gudang-a",
-          status: "ACTIVE",
+          id: "pi-b",
+          integrationId: "int-shop-b",
+          externalId: "22222",
+          externalModelId: "0",
+          sku: "PROD-SKU-01",
+          variant: { warehouseStocks: [{ stock: 45 }] },
         },
       ]);
-
-      mockPrisma.productIntegration.findMany
-        .mockResolvedValueOnce([
-          {
-            id: "pi-a",
-            integrationId: "int-shop-a",
-            externalId: "11111",
-            externalModelId: "0",
-            sku: "PROD-SKU-01",
-            variant: { warehouseStocks: [{ stock: 45 }] },
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "pi-b",
-            integrationId: "int-shop-b",
-            externalId: "22222",
-            externalModelId: "0",
-            sku: "PROD-SKU-01",
-            variant: { warehouseStocks: [{ stock: 45 }] },
-          },
-        ]);
 
       mockPrisma.productIntegration.update.mockResolvedValue({});
 
@@ -344,8 +369,8 @@ describe("ShopeeSyncService Unit Tests", () => {
         })
       );
 
-      // Memverifikasi sisa stok terdorong ke kedua toko (Toko A dan Toko B)
-      expect(res.syncedStoresCount).toBe(2);
+      // Memverifikasi hanya toko lain (Toko B) yang disinkronkan, karena Toko A sudah dipotong Shopee otomatis
+      expect(res.syncedStoresCount).toBe(1);
     });
 
     it("should fetch item details using Shopee API if items array is not provided in webhook", async () => {
@@ -682,6 +707,131 @@ describe("ShopeeSyncService Unit Tests", () => {
           update: { stock: 6 },
         })
       );
+    });
+
+    it("should correctly handle user scenario: Toko A receives order Q=1, Gudang A reduced 50->49, Toko B reduced 70->69, Toko A not double-deducted", async () => {
+      // Skenario User:
+      // Stock Gudang A : 50
+      // Stock Toko A (Terhubung Gudang A) : 100 di Shopee
+      // Stock Toko B (Terhubung Gudang A) : 70 di Shopee
+      // Pesanan masuk pada Toko A sebesar 1:
+      // Hasil yang diharapkan:
+      // Stock Gudang A : 49
+      // Stock Toko A : 99 (Shopee sudah potong otomatis, jangan ditimpa atau dipotong ganda)
+      // Stock Toko B : 69 (Dipotong 1 via Shopee API update_stock)
+
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-shop-a",
+        shopId: "shop-A",
+        warehouseId: "wh-gudang-a",
+        warehouse: { name: "Gudang A" },
+      });
+
+      mockPrisma.syncJob.findFirst.mockResolvedValue(null);
+      mockPrisma.syncJob.create.mockResolvedValue({ id: "job-new" });
+
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: "var-1",
+        sku: "SKU-SHARED-01",
+        product: { name: "Produk Saling Terhubung" },
+      });
+
+      // Stock awal Gudang A = 50
+      mockPrisma.productVariantStock.findUnique.mockResolvedValue({ stock: 50 });
+      mockPrisma.productVariantStock.upsert.mockResolvedValue({ stock: 49 });
+
+      // Integrasi toko yang terhubung ke Gudang A
+      mockPrisma.integration.findMany.mockImplementation(async (args: any) => {
+        const notId = args?.where?.id?.not;
+        const all = [
+          {
+            id: "int-shop-a",
+            shopId: "shop-A",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+          {
+            id: "int-shop-b",
+            shopId: "shop-B",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+        ];
+        return notId ? all.filter((i) => i.id !== notId) : all;
+      });
+
+      // Mapping produk untuk Toko B
+      mockPrisma.productIntegration.findMany.mockResolvedValue([
+        {
+          id: "pi-b",
+          integrationId: "int-shop-b",
+          externalId: "2001",
+          externalModelId: "0",
+          sku: "SKU-SHARED-01",
+          variant: { warehouseStocks: [{ stock: 49 }] },
+        },
+      ]);
+
+      mockPrisma.productIntegration.update.mockResolvedValue({});
+
+      const mockUpdateStock = vi.fn().mockResolvedValue({
+        response: { success_list: [{ model_id: 0, stock: 69 }], failure_list: [] },
+      });
+
+      const { getShopeeClientForIntegration } = await import("@/lib/shopee/client");
+      vi.mocked(getShopeeClientForIntegration).mockResolvedValue({
+        product: {
+          updateStock: mockUpdateStock,
+          getItemBaseInfo: vi.fn().mockResolvedValue({
+            response: {
+              item_list: [
+                {
+                  item_id: 2001,
+                  stock_info_v2: {
+                    summary_info: { total_available_stock: 70 },
+                    seller_stock: [{ stock: 70 }],
+                  },
+                },
+              ],
+            },
+          }),
+          getModelList: vi.fn().mockResolvedValue({ response: { model: [] } }),
+        },
+      } as any);
+
+      const res = await shopeeSyncService.processShippedOrder({
+        shopId: "shop-A",
+        orderSn: "ORDER-USER-001",
+        items: [
+          {
+            sku: "SKU-SHARED-01",
+            quantity: 1,
+          },
+        ],
+      });
+
+      expect(res.success).toBe(true);
+
+      // 1. Gudang A berkurang dari 50 menjadi 49
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: { stock: 49 },
+        })
+      );
+
+      // 2. Toko B (Shop B) menerima update_stock dari 70 dikurangi 1 menjadi 69
+      expect(mockUpdateStock).toHaveBeenCalledWith({
+        item_id: 2001,
+        stock_list: [
+          {
+            model_id: 0,
+            seller_stock: [{ stock: 69 }],
+          },
+        ],
+      });
+
+      // 3. Toko A tidak dipotong dua kali (hanya 1 toko yang disinkronkan, yaitu Toko B)
+      expect(res.syncedStoresCount).toBe(1);
     });
   });
 });
