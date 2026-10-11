@@ -431,6 +431,18 @@ export class ShopeeSyncService {
             errorMessage: orderSn,
           },
         });
+
+        // Simpan snapshot rincian item yang dipotong untuk cadangan restock jika API Shopee offline/gagal saat pembatalan
+        await tx.syncJob.create({
+          data: {
+            integrationId: integration.id,
+            type: "ORDER_DEDUCTION_ITEMS",
+            status: "COMPLETED",
+            totalItems: itemsToDeduct.length,
+            processedItems: deductedVariants.length,
+            errorMessage: `${orderSn}::${JSON.stringify(itemsToDeduct)}`,
+          },
+        });
       });
 
       // 5. Multi-Shop Sync: Sinkronkan sisa stok baru ke SEMUA toko Shopee aktif yang terhubung dengan gudang ini
@@ -598,7 +610,11 @@ export class ShopeeSyncService {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const detailData = (detailRes as any)?.response || detailRes;
           const orderDetail = detailData?.order_list?.[0];
-          const itemList = orderDetail?.item_list || [];
+          const itemList =
+            orderDetail?.item_list ||
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            orderDetail?.package_list?.flatMap((pkg: any) => pkg.item_list || []) ||
+            [];
 
           itemsToRestock = itemList.map(
             (it: {
@@ -607,15 +623,43 @@ export class ShopeeSyncService {
               model_sku?: string;
               item_sku?: string;
               model_quantity_purchased?: number;
+              model_quantity?: number;
+              quantity?: number;
             }) => ({
               itemId: it.item_id,
               modelId: it.model_id,
               sku: (it.model_sku || it.item_sku || "").trim(),
-              quantity: it.model_quantity_purchased || 1,
+              quantity:
+                it.model_quantity_purchased ||
+                it.model_quantity ||
+                it.quantity ||
+                1,
             })
           );
         } catch (err) {
           console.warn(`Gagal fetch order detail untuk #${orderSn}:`, err);
+        }
+      }
+
+      // Fallback: Jika pemanggilan Open API Shopee gagal/kosong, ambil snapshot item dari pencatatan pemotongan pesanan
+      if (itemsToRestock.length === 0) {
+        try {
+          const backupJob = await this.db.syncJob.findFirst({
+            where: {
+              integrationId: integration.id,
+              type: "ORDER_DEDUCTION_ITEMS",
+              errorMessage: { startsWith: `${orderSn}::` },
+              status: "COMPLETED",
+            },
+            orderBy: { createdAt: "desc" },
+          });
+
+          if (backupJob?.errorMessage) {
+            const jsonPart = backupJob.errorMessage.slice(orderSn.length + 2);
+            itemsToRestock = JSON.parse(jsonPart);
+          }
+        } catch (backupErr) {
+          console.warn(`Gagal mengambil backup item untuk pesanan #${orderSn}:`, backupErr);
         }
       }
 
@@ -662,11 +706,23 @@ export class ShopeeSyncService {
 
           // Fallback: cari lewat mapping ProductIntegration jika SKU Shopee kosong atau berbeda
           if (!variant && item.itemId) {
+            const modelIdStr =
+              item.modelId !== undefined && item.modelId !== null
+                ? String(item.modelId)
+                : "";
             const pi = await tx.productIntegration.findFirst({
               where: {
                 integrationId: integration.id,
                 externalId: String(item.itemId),
-                ...(item.modelId ? { externalModelId: String(item.modelId) } : {}),
+                ...(modelIdStr && modelIdStr !== "0"
+                  ? { externalModelId: modelIdStr }
+                  : {
+                      OR: [
+                        { externalModelId: null },
+                        { externalModelId: "" },
+                        { externalModelId: "0" },
+                      ],
+                    }),
                 variantId: { not: null },
               },
               include: {
@@ -740,12 +796,13 @@ export class ShopeeSyncService {
       });
 
       // 5. Multi-Shop Sync: Sinkronkan sisa stok yang bertambah ke SEMUA toko Shopee aktif yang terhubung dengan gudang ini
+      // KECUALI toko asal pesanan (integration.id), karena sistem marketplace Shopee sudah otomatis merestock listingnya sendiri
       let syncedStoresCount = 0;
       if (restockedVariants.length > 0) {
         const syncResult = await this.pushStockUpdateToShopee(
           warehouseId,
           restockedVariants,
-          { allowInactive: false }
+          { allowInactive: false, excludeIntegrationId: integration.id }
         );
         syncedStoresCount = syncResult.pushedCount;
       }
