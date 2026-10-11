@@ -193,7 +193,10 @@ export async function POST(req: NextRequest) {
       // Aturan Bisnis 2: Pengembalian stok otomatis saat pesanan dibatalkan (CANCELLED)
       const isCancelledOrder =
         orderStatus === "CANCELLED" ||
-        orderStatus === "IN_CANCEL";
+        orderStatus === "IN_CANCEL" ||
+        orderStatus === "CANCELED" ||
+        orderStatus === "CANCEL_PENDING" ||
+        orderStatus === "TO_RETURN";
 
       if (isCancelledOrder) {
         const result = await shopeeSyncService.processCancelledOrder({

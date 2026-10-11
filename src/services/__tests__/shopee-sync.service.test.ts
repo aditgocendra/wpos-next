@@ -506,43 +506,36 @@ describe("ShopeeSyncService Unit Tests", () => {
         stock: 50,
       });
 
-      // Gudang A terhubung dengan Toko A dan Toko B
-      mockPrisma.integration.findMany.mockResolvedValue([
+      // Gudang A terhubung dengan Toko A dan Toko B. Tapi Toko A harus di-exclude agar tidak double restock di Shopee!
+      mockPrisma.integration.findMany.mockImplementation(async (args: any) => {
+        const notId = args?.where?.id?.not;
+        const all = [
+          {
+            id: "int-shop-a",
+            shopId: "shop-A",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+          {
+            id: "int-shop-b",
+            shopId: "shop-B",
+            warehouseId: "wh-gudang-a",
+            status: "ACTIVE",
+          },
+        ];
+        return notId ? all.filter((i) => i.id !== notId) : all;
+      });
+
+      mockPrisma.productIntegration.findMany.mockResolvedValue([
         {
-          id: "int-shop-a",
-          shopId: "shop-A",
-          warehouseId: "wh-gudang-a",
-          status: "ACTIVE",
-        },
-        {
-          id: "int-shop-b",
-          shopId: "shop-B",
-          warehouseId: "wh-gudang-a",
-          status: "ACTIVE",
+          id: "pi-b",
+          integrationId: "int-shop-b",
+          externalId: "22222",
+          externalModelId: "0",
+          sku: "PROD-SKU-01",
+          variant: { warehouseStocks: [{ stock: 50 }] },
         },
       ]);
-
-      mockPrisma.productIntegration.findMany
-        .mockResolvedValueOnce([
-          {
-            id: "pi-a",
-            integrationId: "int-shop-a",
-            externalId: "11111",
-            externalModelId: "0",
-            sku: "PROD-SKU-01",
-            variant: { warehouseStocks: [{ stock: 50 }] },
-          },
-        ])
-        .mockResolvedValueOnce([
-          {
-            id: "pi-b",
-            integrationId: "int-shop-b",
-            externalId: "22222",
-            externalModelId: "0",
-            sku: "PROD-SKU-01",
-            variant: { warehouseStocks: [{ stock: 50 }] },
-          },
-        ]);
 
       mockPrisma.productIntegration.update.mockResolvedValue({});
 
@@ -584,8 +577,8 @@ describe("ShopeeSyncService Unit Tests", () => {
         })
       );
 
-      // Verifikasi sisa stok terdorong ke Toko A dan Toko B
-      expect(res.syncedStoresCount).toBe(2);
+      // Verifikasi sisa stok terdorong HANYA ke Toko B (Toko A di-exclude dari API push untuk mencegah double restock 6)
+      expect(res.syncedStoresCount).toBe(1);
     });
 
     it("should fetch item details using Shopee API if items array is omitted on cancel", async () => {
@@ -627,6 +620,66 @@ describe("ShopeeSyncService Unit Tests", () => {
       expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           update: { stock: 13 },
+        })
+      );
+    });
+
+    it("should fallback to ORDER_DEDUCTION_ITEMS snapshot when items array is omitted and Shopee API getOrderDetail fails", async () => {
+      mockPrisma.integration.findFirst.mockResolvedValue({
+        id: "int-shop-a",
+        shopId: "shop-A",
+        warehouseId: "wh-gudang-a",
+        warehouse: { name: "Gudang A" },
+      });
+
+      // Pengecekan 1: deductionJob (COMPLETED)
+      // Pengecekan 2: alreadyRestocked (null)
+      // Pengecekan 3 (fallback backup items): ORDER_DEDUCTION_ITEMS job
+      mockPrisma.syncJob.findFirst
+        .mockResolvedValueOnce({
+          id: "job-deduct-1",
+          type: "ORDER_SHIPPED",
+          errorMessage: "ORDER-FALLBACK-001",
+          status: "COMPLETED",
+        })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: "job-backup-1",
+          type: "ORDER_DEDUCTION_ITEMS",
+          errorMessage: `ORDER-FALLBACK-001::${JSON.stringify([{ sku: "BACKUP-SKU-1", quantity: 2 }])}`,
+          status: "COMPLETED",
+        });
+
+      mockPrisma.syncJob.create.mockResolvedValue({ id: "job-new" });
+
+      mockPrisma.productVariant.findFirst.mockResolvedValue({
+        id: "var-backup",
+        sku: "BACKUP-SKU-1",
+        product: { name: "Backup Product" },
+      });
+
+      // Stock awal 4 di gudang, kembali 2 menjadi 6
+      mockPrisma.productVariantStock.findUnique.mockResolvedValue({ stock: 4 });
+      mockPrisma.productVariantStock.upsert.mockResolvedValue({ stock: 6 });
+      mockPrisma.integration.findMany.mockResolvedValue([]);
+
+      // Mock client order detail throws error
+      const { getShopeeClientForIntegration } = await import("@/lib/shopee/client");
+      vi.mocked(getShopeeClientForIntegration).mockResolvedValueOnce({
+        order: {
+          getOrderDetail: vi.fn().mockRejectedValue(new Error("Shopee API timeout")),
+        },
+      } as any);
+
+      const res = await shopeeSyncService.processCancelledOrder({
+        shopId: "shop-A",
+        orderSn: "ORDER-FALLBACK-001",
+      });
+
+      expect(res.success).toBe(true);
+      expect(mockPrisma.productVariantStock.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: { stock: 6 },
         })
       );
     });
