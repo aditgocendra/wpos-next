@@ -7,17 +7,24 @@ export interface SyncStockItem {
   quantity?: number;
 }
 
+export interface PushStockUpdateOptions {
+  allowInactive?: boolean;
+  excludeIntegrationId?: string;
+  mode?: "ABSOLUTE" | "DELTA";
+  deltaType?: "DECREMENT" | "INCREMENT";
+}
+
 export class ShopeeSyncService {
   constructor(private db = defaultPrisma) {}
 
   /**
    * Mengirim pembaruan stok ke Shopee saat terjadi transaksi penjualan di POS atau event pesanan online.
-   * Mendorong stok terbaru dari gudang ke semua toko Shopee aktif yang terhubung.
+   * Mendukung mode ABSOLUTE (push stok gudang) atau DELTA (decrement/increment relatif berdasarkan quantity).
    */
   async pushStockUpdateToShopee(
     warehouseId: string,
     items: SyncStockItem[],
-    options?: { allowInactive?: boolean; excludeIntegrationId?: string }
+    options?: PushStockUpdateOptions
   ): Promise<{ success: boolean; pushedCount: number; errors?: string[] }> {
     try {
       if (!warehouseId || !items || items.length === 0) {
@@ -45,6 +52,27 @@ export class ShopeeSyncService {
       const skus = items
         .map((i) => (i.sku ? i.sku.trim() : ""))
         .filter((s): s is string => Boolean(s));
+
+      const deltaQtyByVariantId = new Map<string, number>();
+      const deltaQtyBySku = new Map<string, number>();
+      for (const it of items) {
+        const qty = Math.max(1, Number(it.quantity) || 1);
+        if (it.variantId) {
+          deltaQtyByVariantId.set(
+            it.variantId,
+            (deltaQtyByVariantId.get(it.variantId) || 0) + qty
+          );
+        }
+        if (it.sku) {
+          const trimmed = it.sku.trim();
+          if (trimmed) {
+            deltaQtyBySku.set(
+              trimmed,
+              (deltaQtyBySku.get(trimmed) || 0) + qty
+            );
+          }
+        }
+      }
 
       let totalPushedCount = 0;
       const allErrors: string[] = [];
@@ -106,6 +134,7 @@ export class ShopeeSyncService {
           number,
           Array<{
             piId: string;
+            variantId: string | null;
             sku: string | null;
             modelId: number;
             stock: number;
@@ -123,6 +152,7 @@ export class ShopeeSyncService {
           const list = groupedByItemId.get(itemId) || [];
           list.push({
             piId: pi.id,
+            variantId: pi.variantId,
             sku: pi.sku,
             modelId: isNaN(modelId) ? 0 : modelId,
             stock: currentStock,
@@ -134,12 +164,92 @@ export class ShopeeSyncService {
         for (const [itemId, variantList] of groupedByItemId.entries()) {
           if (shopeeClient) {
             try {
-              const res = await shopeeClient.product.updateStock({
-                item_id: itemId,
-                stock_list: variantList.map((v) => ({
+              let stockToUpdateList: Array<{
+                model_id: number;
+                seller_stock: [{ stock: number }];
+              }> = [];
+
+              if (options?.mode === "DELTA") {
+                const deltaType = options.deltaType || "DECREMENT";
+                const hasModels = variantList.some((v) => v.modelId > 0);
+
+                const currentShopeeStockByModelId = new Map<number, number>();
+                let currentShopeeItemStock: number | null = null;
+
+                if (hasModels) {
+                  try {
+                    const modelRes = await shopeeClient.product.getModelList({ item_id: itemId });
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const modelData = (modelRes as any)?.response || modelRes;
+                    const models = modelData?.model || [];
+                    for (const m of models) {
+                      const avail =
+                        m.stock_info_v2?.summary_info?.total_available_stock ??
+                        m.stock_info_v2?.seller_stock?.[0]?.stock ??
+                        0;
+                      currentShopeeStockByModelId.set(Number(m.model_id), avail);
+                    }
+                  } catch (modelErr) {
+                    console.warn(`Gagal getModelList untuk item ${itemId}:`, modelErr);
+                  }
+                }
+
+                if (variantList.some((v) => v.modelId === 0)) {
+                  try {
+                    const baseRes = await shopeeClient.product.getItemBaseInfo({
+                      item_id_list: [itemId],
+                    });
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const baseData = (baseRes as any)?.response || baseRes;
+                    const itemList = baseData?.item_list || baseData?.item || [];
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const foundItem = itemList.find((i: any) => Number(i.item_id) === itemId);
+                    if (foundItem) {
+                      currentShopeeItemStock =
+                        foundItem.stock_info_v2?.summary_info?.total_available_stock ??
+                        foundItem.stock_info_v2?.seller_stock?.[0]?.stock ??
+                        0;
+                    }
+                  } catch (baseErr) {
+                    console.warn(`Gagal getItemBaseInfo untuk item ${itemId}:`, baseErr);
+                  }
+                }
+
+                stockToUpdateList = variantList.map((v) => {
+                  let currentShopeeStock = 0;
+                  if (v.modelId > 0 && currentShopeeStockByModelId.has(v.modelId)) {
+                    currentShopeeStock = currentShopeeStockByModelId.get(v.modelId)!;
+                  } else if (v.modelId === 0 && currentShopeeItemStock !== null) {
+                    currentShopeeStock = currentShopeeItemStock;
+                  } else {
+                    currentShopeeStock = v.stock;
+                  }
+
+                  const deltaQty =
+                    (v.variantId ? deltaQtyByVariantId.get(v.variantId) : undefined) ??
+                    (v.sku ? deltaQtyBySku.get(v.sku) : undefined) ??
+                    1;
+
+                  const targetStock =
+                    deltaType === "INCREMENT"
+                      ? currentShopeeStock + deltaQty
+                      : Math.max(0, currentShopeeStock - deltaQty);
+
+                  return {
+                    model_id: v.modelId,
+                    seller_stock: [{ stock: targetStock }],
+                  };
+                });
+              } else {
+                stockToUpdateList = variantList.map((v) => ({
                   model_id: v.modelId,
                   seller_stock: [{ stock: v.stock }],
-                })),
+                }));
+              }
+
+              const res = await shopeeClient.product.updateStock({
+                item_id: itemId,
+                stock_list: stockToUpdateList,
               });
 
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -414,7 +524,11 @@ export class ShopeeSyncService {
             },
           });
 
-          deductedVariants.push({ variantId: variant.id, sku: variant.sku });
+          deductedVariants.push({
+            variantId: variant.id,
+            sku: variant.sku,
+            quantity: orderQty,
+          });
           deductionLogs.push(
             `Stok SKU "${variant.sku}" (${variant.product?.name || "Produk"}) di gudang "${warehouseName}" berkurang ${orderQty} (${currentQty} -> ${updatedStock.stock}) untuk pesanan #${orderSn}`
           );
@@ -445,13 +559,19 @@ export class ShopeeSyncService {
         });
       });
 
-      // 5. Multi-Shop Sync: Sinkronkan sisa stok baru ke SEMUA toko Shopee aktif yang terhubung dengan gudang ini
+      // 5. Multi-Shop Sync: Sinkronkan sisa stok baru ke toko Shopee lain yang terhubung dengan gudang ini
+      // KECUALI toko asal pesanan (integration.id), karena stok toko asal sudah dipotong otomatis oleh marketplace Shopee
       let syncedStoresCount = 0;
       if (deductedVariants.length > 0) {
         const syncResult = await this.pushStockUpdateToShopee(
           warehouseId,
           deductedVariants,
-          { allowInactive: false }
+          {
+            allowInactive: false,
+            excludeIntegrationId: integration.id,
+            mode: "DELTA",
+            deltaType: "DECREMENT",
+          }
         );
         syncedStoresCount = syncResult.pushedCount;
       }
@@ -776,7 +896,11 @@ export class ShopeeSyncService {
             },
           });
 
-          restockedVariants.push({ variantId: variant.id, sku: variant.sku });
+          restockedVariants.push({
+            variantId: variant.id,
+            sku: variant.sku,
+            quantity: orderQty,
+          });
           restockLogs.push(
             `Stok SKU "${variant.sku}" (${variant.product?.name || "Produk"}) di gudang "${warehouseName}" bertambah ${orderQty} (${currentQty} -> ${updatedStock.stock}) karena pembatalan pesanan #${orderSn}`
           );
@@ -802,7 +926,12 @@ export class ShopeeSyncService {
         const syncResult = await this.pushStockUpdateToShopee(
           warehouseId,
           restockedVariants,
-          { allowInactive: false, excludeIntegrationId: integration.id }
+          {
+            allowInactive: false,
+            excludeIntegrationId: integration.id,
+            mode: "DELTA",
+            deltaType: "INCREMENT",
+          }
         );
         syncedStoresCount = syncResult.pushedCount;
       }

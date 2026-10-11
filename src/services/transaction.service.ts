@@ -435,7 +435,10 @@ export class TransactionService {
 
     // Push stock update to Shopee asynchronously if warehouse has an active Shopee integration
     shopeeSyncService
-      .pushStockUpdateToShopee(input.warehouseId, input.items)
+      .pushStockUpdateToShopee(input.warehouseId, input.items, {
+        mode: "DELTA",
+        deltaType: "DECREMENT",
+      })
       .catch((err) => console.error("Shopee stock push error on checkout:", err));
 
     return result;
@@ -635,19 +638,64 @@ export class TransactionService {
         },
       });
 
-      return this.formatTransaction(updated);
+      return {
+        updatedTransaction: this.formatTransaction(updated),
+        oldItems: existing.items.map((it) => ({
+          variantId: it.variantId,
+          quantity: it.quantity,
+        })),
+      };
     });
 
-    const uniqueVariantsToSync = Array.from(new Set([
-      ...(input.items ? input.items.map(it => it.variantId) : []),
-      ...result.items.map(it => it.variantId) // result is the updated transaction, so it contains the current items
-    ])).map(vId => ({ variantId: vId }));
+    if (input.items && Array.isArray(input.items)) {
+      const decrements: Array<{ variantId: string; quantity: number }> = [];
+      const increments: Array<{ variantId: string; quantity: number }> = [];
 
-    shopeeSyncService
-      .pushStockUpdateToShopee(result.warehouseId, uniqueVariantsToSync)
-      .catch((err) => console.error("Shopee stock push error on update transaction:", err));
+      const diffMap = new Map<string, number>();
+      for (const oldItem of result.oldItems) {
+        diffMap.set(
+          oldItem.variantId,
+          (diffMap.get(oldItem.variantId) || 0) - oldItem.quantity
+        );
+      }
+      for (const newItem of input.items) {
+        diffMap.set(
+          newItem.variantId,
+          (diffMap.get(newItem.variantId) || 0) + newItem.quantity
+        );
+      }
 
-    return result;
+      for (const [variantId, diff] of diffMap.entries()) {
+        if (diff > 0) {
+          decrements.push({ variantId, quantity: diff });
+        } else if (diff < 0) {
+          increments.push({ variantId, quantity: Math.abs(diff) });
+        }
+      }
+
+      if (decrements.length > 0) {
+        shopeeSyncService
+          .pushStockUpdateToShopee(result.updatedTransaction.warehouseId, decrements, {
+            mode: "DELTA",
+            deltaType: "DECREMENT",
+          })
+          .catch((err) =>
+            console.error("Shopee stock push error on update transaction (decrement):", err)
+          );
+      }
+      if (increments.length > 0) {
+        shopeeSyncService
+          .pushStockUpdateToShopee(result.updatedTransaction.warehouseId, increments, {
+            mode: "DELTA",
+            deltaType: "INCREMENT",
+          })
+          .catch((err) =>
+            console.error("Shopee stock push error on update transaction (increment):", err)
+          );
+      }
+    }
+
+    return result.updatedTransaction;
   }
 
   /**
@@ -688,11 +736,21 @@ export class TransactionService {
         where: { id },
       });
 
-      return { success: true, itemsToSync: existing.items.map(it => ({ variantId: it.variantId })), warehouseId: existing.warehouseId };
+      return {
+        success: true,
+        itemsToSync: existing.items.map((it) => ({
+          variantId: it.variantId,
+          quantity: it.quantity,
+        })),
+        warehouseId: existing.warehouseId,
+      };
     });
 
     shopeeSyncService
-      .pushStockUpdateToShopee(result.warehouseId, result.itemsToSync)
+      .pushStockUpdateToShopee(result.warehouseId, result.itemsToSync, {
+        mode: "DELTA",
+        deltaType: "INCREMENT",
+      })
       .catch((err) => console.error("Shopee stock push error on delete transaction:", err));
 
     return { success: result.success };
