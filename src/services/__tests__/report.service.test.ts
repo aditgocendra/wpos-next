@@ -167,6 +167,110 @@ describe("ReportService Unit Tests", () => {
       expect(result[0].totalQuantity).toBe(2);
       expect(result[0].totalAmount).toBe(300000);
       expect(result[0].productNames).toBe("Kemeja Casual");
+      expect(result[0].totalCost).toBe(0);
+      expect(result[0].profit).toBe(300000);
+    });
+
+    it("should calculate totalCost (hpp * qty) and profit (harga jual akhir setelah diskon - totalCost) correctly", async () => {
+      const mockTransactions = [
+        {
+          id: "trx-profit",
+          transactionNumber: "TRX-20260828-PROFIT",
+          warehouseId: "wh-1",
+          warehouse: sampleWarehouse,
+          totalAmount: 280000, // Harga jual akhir setelah diskon (300k - 20k)
+          discount: 20000,
+          createdAt: new Date("2026-08-28T10:00:00Z"),
+          createdBy: { name: "Kasir 1", email: "kasir@wpos.com" },
+          items: [
+            {
+              id: "ti-profit-1",
+              productId: "prod-1",
+              variantId: "var-1",
+              quantity: 2,
+              price: 150000,
+              totalPrice: 300000,
+              costPrice: 100000, // HPP per unit
+              product: sampleProduct,
+              variant: sampleVariant,
+            },
+          ],
+        },
+      ];
+
+      mockPrisma.transaction.findMany.mockResolvedValue(mockTransactions);
+
+      const result = await reportService.getTransactionReport({});
+
+      expect(result).toHaveLength(1);
+      const trx = result[0];
+      expect(trx.items[0].costPrice).toBe(100000);
+      expect(trx.items[0].totalCost).toBe(200000); // 100,000 * 2
+      expect(trx.totalCost).toBe(200000); // sum of (hpp * qty)
+      expect(trx.totalAmount).toBe(280000); // harga jual akhir setelah diskon
+      expect(trx.discount).toBe(20000);
+      expect(trx.profit).toBe(80000); // 280,000 - 200,000
+    });
+
+    it("should sort transactions by profit and totalCost correctly", async () => {
+      const trxHighProfit = {
+        id: "trx-high",
+        transactionNumber: "TRX-HIGH",
+        warehouseId: "wh-1",
+        warehouse: sampleWarehouse,
+        totalAmount: 500000,
+        discount: 0,
+        createdAt: new Date("2026-08-28T10:00:00Z"),
+        createdBy: { name: "Kasir 1", email: "kasir@wpos.com" },
+        items: [
+          {
+            id: "ti-high",
+            productId: "prod-1",
+            variantId: "var-1",
+            quantity: 1,
+            price: 500000,
+            totalPrice: 500000,
+            costPrice: 100000,
+            product: sampleProduct,
+            variant: sampleVariant,
+          },
+        ],
+      };
+
+      const trxLowProfit = {
+        id: "trx-low",
+        transactionNumber: "TRX-LOW",
+        warehouseId: "wh-1",
+        warehouse: sampleWarehouse,
+        totalAmount: 150000,
+        discount: 0,
+        createdAt: new Date("2026-08-28T10:00:00Z"),
+        createdBy: { name: "Kasir 1", email: "kasir@wpos.com" },
+        items: [
+          {
+            id: "ti-low",
+            productId: "prod-1",
+            variantId: "var-1",
+            quantity: 1,
+            price: 150000,
+            totalPrice: 150000,
+            costPrice: 120000,
+            product: sampleProduct,
+            variant: sampleVariant,
+          },
+        ],
+      };
+
+      mockPrisma.transaction.findMany.mockResolvedValue([trxLowProfit, trxHighProfit]);
+
+      // Sort by profit desc
+      const sortedByProfitDesc = await reportService.getTransactionReport({
+        sortBy: "profit",
+        sortOrder: "desc",
+      });
+
+      expect(sortedByProfitDesc[0].transactionNumber).toBe("TRX-HIGH"); // profit: 400,000
+      expect(sortedByProfitDesc[1].transactionNumber).toBe("TRX-LOW"); // profit: 30,000
     });
   });
 });

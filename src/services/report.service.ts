@@ -30,7 +30,7 @@ export interface GetTransactionReportParams {
   categoryId?: string;
   warehouseId?: string;
   search?: string;
-  sortBy?: "productName" | "transactionNumber" | "createdAt" | "totalAmount";
+  sortBy?: "productName" | "transactionNumber" | "createdAt" | "totalAmount" | "totalCost" | "profit";
   sortOrder?: "asc" | "desc";
 }
 
@@ -44,6 +44,8 @@ export interface TransactionReportItemDetail {
   quantity: number;
   price: number;
   totalPrice: number;
+  costPrice: number;
+  totalCost: number;
 }
 
 export interface TransactionReportItem {
@@ -54,7 +56,10 @@ export interface TransactionReportItem {
   warehouseName: string;
   items: TransactionReportItemDetail[];
   totalQuantity: number;
+  totalCost: number;
   totalAmount: number;
+  discount: number;
+  profit: number;
   productNames: string;
   variantNames: string;
   categories: string;
@@ -259,20 +264,36 @@ export class ReportService {
         ? t.items.filter((item) => item.product.categoryId === categoryId)
         : t.items;
 
-      const details: TransactionReportItemDetail[] = filteredItems.map((item) => ({
-        productId: item.productId,
-        productName: item.product.name,
-        variantId: item.variantId,
-        variantName: item.variant.variantName,
-        sku: item.variant.sku,
-        categoryName: item.product.category?.name || "Uncategorized",
-        quantity: item.quantity,
-        price: item.price,
-        totalPrice: item.totalPrice,
-      }));
+      const details: TransactionReportItemDetail[] = filteredItems.map((item) => {
+        const costPrice = item.costPrice || 0;
+        const totalCost = costPrice * item.quantity;
+        return {
+          productId: item.productId,
+          productName: item.product.name,
+          variantId: item.variantId,
+          variantName: item.variant.variantName,
+          sku: item.variant.sku,
+          categoryName: item.product.category?.name || "Uncategorized",
+          quantity: item.quantity,
+          price: item.price,
+          totalPrice: item.totalPrice,
+          costPrice,
+          totalCost,
+        };
+      });
 
       const totalQuantity = details.reduce((sum, item) => sum + item.quantity, 0);
-      const totalAmount = details.reduce((sum, item) => sum + item.totalPrice, 0);
+      const totalCost = details.reduce((sum, item) => sum + item.totalCost, 0);
+      const grossAmount = details.reduce((sum, item) => sum + item.totalPrice, 0);
+      const discount = t.discount || 0;
+      const totalAmount =
+        categoryId && categoryId !== "all"
+          ? Math.max(0, grossAmount - discount)
+          : t.totalAmount;
+
+      // Keuntungan dihitung dari harga jual akhir setelah diskon - (hpp * qty)
+      const profit = totalAmount - totalCost;
+
       const productNames = Array.from(new Set(details.map((item) => item.productName))).join(", ");
       const variantNames = Array.from(new Set(details.map((item) => `${item.productName} (${item.variantName})`))).join(", ");
       const categories = Array.from(new Set(details.map((item) => item.categoryName))).join(", ");
@@ -285,7 +306,10 @@ export class ReportService {
         warehouseName: t.warehouse.name,
         items: details,
         totalQuantity,
-        totalAmount: totalAmount > 0 ? totalAmount : t.totalAmount,
+        totalCost,
+        totalAmount,
+        discount,
+        profit,
         productNames: productNames || "-",
         variantNames: variantNames || "-",
         categories: categories || "-",
@@ -304,6 +328,10 @@ export class ReportService {
         comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (sortBy === "totalAmount") {
         comparison = a.totalAmount - b.totalAmount;
+      } else if (sortBy === "totalCost") {
+        comparison = a.totalCost - b.totalCost;
+      } else if (sortBy === "profit") {
+        comparison = a.profit - b.profit;
       }
 
       return sortOrder === "desc" ? -comparison : comparison;

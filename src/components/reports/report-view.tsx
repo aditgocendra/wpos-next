@@ -15,12 +15,14 @@ import {
   RotateCcwIcon,
   FilterIcon,
   ArrowUpDownIcon,
+  TrendingUpIcon,
 } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -206,7 +208,9 @@ export function ReportView() {
           "Daftar Produk": item.productNames,
           "Varian Terjual": item.variantNames,
           "Total Qty (Unit)": item.totalQuantity,
+          "Total HPP (Rp)": item.totalCost || 0,
           "Total Nilai Transaksi (Rp)": item.totalAmount,
+          "Keuntungan (Rp)": item.profit || 0,
           Kasir: item.cashierName || "-",
         }));
 
@@ -231,6 +235,11 @@ export function ReportView() {
     activeTab === "products"
       ? productData.reduce((sum, item) => sum + item.quantitySold, 0)
       : transactionData.reduce((sum, item) => sum + item.totalQuantity, 0);
+
+  const totalProfit =
+    activeTab === "transactions"
+      ? transactionData.reduce((sum, item) => sum + (item.profit || 0), 0)
+      : 0;
 
   const totalRecords =
     activeTab === "products" ? productData.length : transactionData.length;
@@ -260,20 +269,50 @@ export function ReportView() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div
+        className={cn(
+          "grid gap-4",
+          activeTab === "transactions"
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+            : "grid-cols-1 sm:grid-cols-3"
+        )}
+      >
         <Card className="shadow-xs border-border/80">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-muted-foreground">Total Penjualan</p>
-              <h3 className="text-xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              <h3 className="text-xl font-bold text-foreground mt-1">
                 Rp {totalRevenue.toLocaleString("id-ID")}
               </h3>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-lg">
+            <div className="p-3 bg-primary/10 text-primary rounded-lg">
               <DollarSignIcon className="size-5" />
             </div>
           </CardContent>
         </Card>
+
+        {activeTab === "transactions" && (
+          <Card className="shadow-xs border-border/80">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Total Keuntungan</p>
+                <h3
+                  className={cn(
+                    "text-xl font-bold mt-1",
+                    totalProfit >= 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400"
+                  )}
+                >
+                  Rp {totalProfit.toLocaleString("id-ID")}
+                </h3>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-lg">
+                <TrendingUpIcon className="size-5" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-xs border-border/80">
           <CardContent className="p-4 flex items-center justify-between">
