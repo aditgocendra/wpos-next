@@ -53,6 +53,7 @@ import {
   WarehouseIcon,
   FilterIcon,
   Loader2Icon,
+  ArrowUpDownIcon,
 } from "lucide-react";
 import type { TransactionData } from "@/services/transaction.service";
 import {
@@ -233,6 +234,26 @@ export function TransactionTable() {
         enableSorting: false,
       },
       {
+        id: "notes",
+        header: "Catatan Transaksi",
+        accessorFn: (row) => row.notes || "",
+        cell: ({ row }) => {
+          const notes = row.original.notes;
+          if (!notes) {
+            return <span className="text-muted-foreground text-xs italic">-</span>;
+          }
+          return (
+            <div
+              className="max-w-[200px] truncate text-sm text-foreground/90 font-normal"
+              title={notes}
+            >
+              {notes}
+            </div>
+          );
+        },
+        enableSorting: true,
+      },
+      {
         id: "createdAt",
         header: "Created At",
         accessorFn: (row) => row.createdAt,
@@ -351,10 +372,10 @@ export function TransactionTable() {
       <div className="rounded-xl border bg-card p-4 shadow-xs">
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
           {/* Search Input */}
-          <div className="sm:col-span-8 relative">
+          <div className="sm:col-span-5 relative">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
-              placeholder="Cari ID transaksi atau nama produk (case insensitive)..."
+              placeholder="Cari ID transaksi, produk, catatan..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 bg-background"
@@ -383,6 +404,57 @@ export function TransactionTable() {
                     {wh.name} {wh.code ? `(${wh.code})` : ""}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Quick Sort Selector */}
+          <div className="sm:col-span-3">
+            <Select
+              value={
+                sorting[0]?.id === "notes"
+                  ? sorting[0].desc
+                    ? "notes-desc"
+                    : "notes-asc"
+                  : sorting[0]?.id === "createdAt"
+                  ? sorting[0].desc
+                    ? "createdAt-desc"
+                    : "createdAt-asc"
+                  : sorting[0]?.id === "productName"
+                  ? sorting[0].desc
+                    ? "productName-desc"
+                    : "productName-asc"
+                  : "createdAt-desc"
+              }
+              onValueChange={(val) => {
+                if (val === "notes-asc") {
+                  setSorting([{ id: "notes", desc: false }]);
+                } else if (val === "notes-desc") {
+                  setSorting([{ id: "notes", desc: true }]);
+                } else if (val === "createdAt-desc") {
+                  setSorting([{ id: "createdAt", desc: true }]);
+                } else if (val === "createdAt-asc") {
+                  setSorting([{ id: "createdAt", desc: false }]);
+                } else if (val === "productName-asc") {
+                  setSorting([{ id: "productName", desc: false }]);
+                } else if (val === "productName-desc") {
+                  setSorting([{ id: "productName", desc: true }]);
+                }
+              }}
+            >
+              <SelectTrigger className="w-full bg-background">
+                <div className="flex items-center gap-2 truncate">
+                  <ArrowUpDownIcon className="size-3.5 text-muted-foreground shrink-0" />
+                  <SelectValue placeholder="Urutkan Transaksi" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="createdAt-desc">Waktu: Terbaru</SelectItem>
+                <SelectItem value="createdAt-asc">Waktu: Terlama</SelectItem>
+                <SelectItem value="notes-asc">Catatan: A - Z</SelectItem>
+                <SelectItem value="notes-desc">Catatan: Z - A</SelectItem>
+                <SelectItem value="productName-asc">Produk: A - Z</SelectItem>
+                <SelectItem value="productName-desc">Produk: Z - A</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -417,19 +489,23 @@ export function TransactionTable() {
                       key={header.id}
                       className={cn(
                         "h-11 font-semibold text-foreground select-none",
-                        header.column.getCanSort() && "cursor-pointer"
+                        header.column.getCanSort() && "cursor-pointer hover:text-primary transition-colors"
                       )}
                       onClick={header.column.getToggleSortingHandler()}
                     >
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         {flexRender(
                           header.column.columnDef.header,
                           header.getContext()
                         )}
                         {{
-                          asc: <ChevronUpIcon className="size-3.5 text-primary" />,
-                          desc: <ChevronDownIcon className="size-3.5 text-primary" />,
-                        }[header.column.getIsSorted() as string] ?? null}
+                          asc: <ChevronUpIcon className="size-3.5 text-primary shrink-0" />,
+                          desc: <ChevronDownIcon className="size-3.5 text-primary shrink-0" />,
+                        }[header.column.getIsSorted() as string] ?? (
+                          header.column.getCanSort() ? (
+                            <ArrowUpDownIcon className="size-3 text-muted-foreground/40 shrink-0" />
+                          ) : null
+                        )}
                       </div>
                     </TableHead>
                   );
@@ -515,6 +591,13 @@ export function TransactionTable() {
                       item.productNames.join(", ")
                     )}
                   </div>
+
+                  {item.notes && (
+                    <div className="text-xs text-muted-foreground bg-muted/40 rounded-md px-2.5 py-1.5 flex items-start gap-1.5 border border-border/50">
+                      <span className="font-semibold text-foreground/80 shrink-0">Catatan:</span>
+                      <span className="truncate">{item.notes}</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-3 border-t">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground truncate pr-2">

@@ -161,6 +161,62 @@ describe("TransactionService Unit Tests", () => {
       expect(result[0].productNames[0]).toBe("Apple iPhone");
       expect(result[1].productNames[0]).toBe("Kemeja Flanel");
     });
+
+    it("should sort by notes ascending and descending correctly", async () => {
+      const trxAlpha = {
+        ...sampleTransaction,
+        id: "trx-alpha",
+        notes: "Antrian Nomor 1",
+      };
+      const trxZeta = {
+        ...sampleTransaction,
+        id: "trx-zeta",
+        notes: "Zonasi Khusus",
+      };
+      const trxEmpty = {
+        ...sampleTransaction,
+        id: "trx-empty",
+        notes: null,
+      };
+
+      mockPrisma.transaction.findMany.mockResolvedValue([trxZeta, trxEmpty, trxAlpha]);
+
+      // Ascending
+      const ascResult = await transactionService.getTransactions({
+        sortBy: "notes",
+        sortOrder: "asc",
+      });
+      expect(ascResult[0].notes).toBe(null); // empty/null comes first in localeCompare or notes
+      expect(ascResult[1].notes).toBe("Antrian Nomor 1");
+      expect(ascResult[2].notes).toBe("Zonasi Khusus");
+
+      // Descending
+      const descResult = await transactionService.getTransactions({
+        sortBy: "notes",
+        sortOrder: "desc",
+      });
+      expect(descResult[0].notes).toBe("Zonasi Khusus");
+      expect(descResult[1].notes).toBe("Antrian Nomor 1");
+      expect(descResult[2].notes).toBe(null);
+    });
+
+    it("should include notes filter in OR search", async () => {
+      mockPrisma.transaction.findMany.mockResolvedValue([sampleTransaction]);
+
+      await transactionService.getTransactions({
+        search: "QRIS",
+      });
+
+      expect(mockPrisma.transaction.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              { notes: { contains: "QRIS", mode: "insensitive" } },
+            ]),
+          }),
+        })
+      );
+    });
   });
 
   describe("getTransactionById", () => {

@@ -24,7 +24,7 @@ export interface UpdateTransactionInput {
 export interface GetTransactionsParams {
   warehouseId?: string;
   search?: string;
-  sortBy?: "productName" | "createdAt";
+  sortBy?: "productName" | "createdAt" | "notes";
   sortOrder?: "asc" | "desc";
 }
 
@@ -138,6 +138,12 @@ export class TransactionService {
           },
         },
         {
+          notes: {
+            contains: searchClean,
+            mode: "insensitive",
+          },
+        },
+        {
           items: {
             some: {
               product: {
@@ -210,6 +216,16 @@ export class TransactionService {
         const nameA = a.productNames.join(", ").toLowerCase();
         const nameB = b.productNames.join(", ").toLowerCase();
         return isAsc ? nameA.localeCompare(nameB) : nameB.localeCompare(nameA);
+      });
+    }
+
+    // Optional sort by notes
+    if (params?.sortBy === "notes") {
+      const isAsc = params.sortOrder === "asc";
+      formatted.sort((a, b) => {
+        const noteA = (a.notes || "").toLowerCase();
+        const noteB = (b.notes || "").toLowerCase();
+        return isAsc ? noteA.localeCompare(noteB) : noteB.localeCompare(noteA);
       });
     }
 
