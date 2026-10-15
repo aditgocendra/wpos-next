@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const warehouseIdParam = searchParams.get("warehouseId") || undefined;
     const search = searchParams.get("search") || undefined;
-    const sortBy = (searchParams.get("sortBy") as "productName" | "createdAt") || undefined;
+    const sortBy = (searchParams.get("sortBy") as "productName" | "createdAt" | "notes") || undefined;
     const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
 
     let warehouseId = warehouseIdParam;
