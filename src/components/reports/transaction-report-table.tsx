@@ -31,6 +31,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableFooter,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
@@ -128,16 +129,22 @@ export function TransactionReportTable({ data, loading = false }: TransactionRep
         header: "Produk & Varian",
         accessorKey: "productNames",
         cell: ({ row }) => (
-          <div className="flex flex-col gap-1 max-w-[280px]">
+          <div className="flex flex-col gap-1 max-w-[300px]">
             {row.original.items.map((item, idx) => (
-              <div key={idx} className="text-xs flex items-center justify-between gap-2 border-b border-border/40 pb-1 last:border-0 last:pb-0">
-                <span className="font-medium text-foreground truncate">
-                  {item.productName}{" "}
-                  <span className="text-muted-foreground">({item.variantName})</span>
-                </span>
-                <span className="text-muted-foreground text-[11px] shrink-0">
-                  {item.quantity}x @ Rp {item.price.toLocaleString("id-ID")}
-                </span>
+              <div key={idx} className="text-xs flex flex-col gap-0.5 border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground truncate">
+                    {item.productName}{" "}
+                    <span className="text-muted-foreground">({item.variantName})</span>
+                  </span>
+                  <span className="text-foreground text-[11px] shrink-0 font-medium">
+                    {item.quantity}x @ Rp {item.price.toLocaleString("id-ID")}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground flex items-center justify-between">
+                  <span>HPP: Rp {(item.costPrice || 0).toLocaleString("id-ID")}</span>
+                  <span>Subtotal: Rp {item.totalPrice.toLocaleString("id-ID")}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -147,23 +154,68 @@ export function TransactionReportTable({ data, loading = false }: TransactionRep
         header: "Total Qty",
         accessorKey: "totalQuantity",
         cell: ({ row }) => (
-          <span className="font-semibold text-primary">
+          <span className="font-semibold text-primary tabular-nums">
             {row.original.totalQuantity.toLocaleString("id-ID")} unit
           </span>
         ),
       },
       {
-        header: "Total Nilai",
+        header: "Total HPP",
+        accessorKey: "totalCost",
+        cell: ({ row }) => (
+          <span className="font-semibold text-muted-foreground tabular-nums text-xs">
+            Rp {(row.original.totalCost || 0).toLocaleString("id-ID")}
+          </span>
+        ),
+      },
+      {
+        header: "Total Penjualan",
         accessorKey: "totalAmount",
         cell: ({ row }) => (
-          <span className="font-bold text-emerald-600 dark:text-emerald-400">
-            Rp {row.original.totalAmount.toLocaleString("id-ID")}
+          <div className="flex flex-col">
+            <span className="font-bold text-foreground tabular-nums text-xs">
+              Rp {row.original.totalAmount.toLocaleString("id-ID")}
+            </span>
+            {row.original.discount > 0 && (
+              <span className="text-[10px] text-muted-foreground">
+                Diskon: Rp {row.original.discount.toLocaleString("id-ID")}
+              </span>
+            )}
+          </div>
+        ),
+      },
+      {
+        header: "Keuntungan",
+        accessorKey: "profit",
+        cell: ({ row }) => (
+          <span
+            className={cn(
+              "font-bold tabular-nums text-xs",
+              (row.original.profit ?? 0) >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-rose-600 dark:text-rose-400"
+            )}
+          >
+            Rp {(row.original.profit ?? 0).toLocaleString("id-ID")}
           </span>
         ),
       },
     ],
     [pagination.pageIndex, pagination.pageSize]
   );
+
+  const summaryTotals = useMemo(() => {
+    return data.reduce(
+      (acc, item) => {
+        acc.totalQuantity += item.totalQuantity || 0;
+        acc.totalCost += item.totalCost || 0;
+        acc.totalAmount += item.totalAmount || 0;
+        acc.totalProfit += item.profit || 0;
+        return acc;
+      },
+      { totalQuantity: 0, totalCost: 0, totalAmount: 0, totalProfit: 0 }
+    );
+  }, [data]);
 
   const table = useReactTable({
     data,
@@ -265,6 +317,34 @@ export function TransactionReportTable({ data, loading = false }: TransactionRep
               </TableRow>
             )}
           </TableBody>
+          {data.length > 0 && (
+            <TableFooter>
+              <TableRow className="bg-muted/60 font-semibold text-xs border-t-2">
+                <TableCell colSpan={5} className="text-right py-3 font-bold">
+                  Total Keseluruhan ({data.length} transaksi):
+                </TableCell>
+                <TableCell className="py-3 text-primary font-bold tabular-nums">
+                  {summaryTotals.totalQuantity.toLocaleString("id-ID")} unit
+                </TableCell>
+                <TableCell className="py-3 text-muted-foreground font-bold tabular-nums">
+                  Rp {summaryTotals.totalCost.toLocaleString("id-ID")}
+                </TableCell>
+                <TableCell className="py-3 text-foreground font-bold tabular-nums">
+                  Rp {summaryTotals.totalAmount.toLocaleString("id-ID")}
+                </TableCell>
+                <TableCell
+                  className={cn(
+                    "py-3 font-bold tabular-nums",
+                    summaryTotals.totalProfit >= 0
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400"
+                  )}
+                >
+                  Rp {summaryTotals.totalProfit.toLocaleString("id-ID")}
+                </TableCell>
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </div>
 

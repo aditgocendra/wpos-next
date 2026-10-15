@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const categoryId = searchParams.get("categoryId") || undefined;
     const warehouseId = searchParams.get("warehouseId") || undefined;
     const search = searchParams.get("search") || undefined;
-    const sortBy = (searchParams.get("sortBy") as "productName" | "transactionNumber" | "createdAt" | "totalAmount") || undefined;
+    const sortBy = (searchParams.get("sortBy") as "productName" | "transactionNumber" | "createdAt" | "totalAmount" | "totalCost" | "profit") || undefined;
     const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") || undefined;
 
     const data = await reportService.getTransactionReport({
